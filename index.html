@@ -308,6 +308,14 @@
         <option value="backtest_scheme_i_plus_c3c5">Canonical backtest (241 trades)</option>
         <option value="">All sources</option>
       </select>
+      <select id="filter-trade-tf" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;" title="Show only trades from this signal timeframe">
+        <option value="match">Trades on this TF</option>
+        <option value="all">All trade timeframes</option>
+        <option value="1w">Weekly trades</option>
+        <option value="1d">Daily trades</option>
+        <option value="4h">4H trades</option>
+        <option value="1h">1H trades</option>
+      </select>
       <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
         <input type="checkbox" id="show-wins" checked> wins
       </label>
@@ -1032,26 +1040,18 @@ async function renderChart() {
 }
 
 function trimToBucket(date) {
-  // Returns the time key matching candle granularity for that TF
-  if (currentTF === "1w") {
-    // Week starts Monday (Binance convention); but we use the ISO date of the bar's open.
-    // Simpler: find the candle whose time <= date and assume same bucket.
-    const ts = Math.floor(date.getTime() / 1000);
-    const candles = candleCache[currentTF] || [];
-    let last = candles[0]?.time;
-    for (const c of candles) {
-      const cTime = typeof c.time === "string" ? Math.floor(new Date(c.time).getTime()/1000) : c.time;
-      if (cTime > ts) break;
-      last = c.time;
-    }
-    return last;
+  // Returns the unix-second time key matching the candle bucket for currentTF.
+  const ts = Math.floor(date.getTime() / 1000);
+  const candles = candleCache[currentTF] || [];
+  if (!candles.length) return ts;
+  // Binary search for the latest candle with time <= ts
+  let lo = 0, hi = candles.length - 1, ans = candles[0].time;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (candles[mid].time <= ts) { ans = candles[mid].time; lo = mid + 1; }
+    else hi = mid - 1;
   }
-  if (currentTF === "1d") {
-    return date.toISOString().split("T")[0];
-  }
-  // 4h or 1h: snap down to bucket
-  const stepSec = currentTF === "4h" ? 4*3600 : 3600;
-  return Math.floor(date.getTime() / 1000 / stepSec) * stepSec;
+  return ans;
 }
 
 function redrawMarkers() {
@@ -1061,9 +1061,15 @@ function redrawMarkers() {
   const showWins = document.getElementById("show-wins").checked;
   const showLosses = document.getElementById("show-losses").checked;
 
+  const tradeTfFilter = document.getElementById("filter-trade-tf").value;
   let trades = LEDGER.filter(r => r.date && r.pnl_pct != null);
   if (src) trades = trades.filter(r => r.source === src);
   trades = trades.filter(t => (t.is_win && showWins) || (t.is_loss && showLosses));
+  if (tradeTfFilter === "match") {
+    trades = trades.filter(t => (t.timeframe || "").toLowerCase() === currentTF);
+  } else if (tradeTfFilter !== "all") {
+    trades = trades.filter(t => (t.timeframe || "").toLowerCase() === tradeTfFilter);
+  }
 
   markersByTime = {};
   trades.forEach(t => {
@@ -1176,6 +1182,7 @@ function applyRangePreset(range) {
 document.getElementById("chart-source").addEventListener("change", redrawMarkers);
 document.getElementById("show-wins").addEventListener("change", redrawMarkers);
 document.getElementById("show-losses").addEventListener("change", redrawMarkers);
+document.getElementById("filter-trade-tf").addEventListener("change", redrawMarkers);
 document.getElementById("chart-clear").addEventListener("click", clearOverlay);
 document.getElementById("trade-detail-close").addEventListener("click", clearOverlay);
 
