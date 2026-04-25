@@ -217,7 +217,8 @@
     </div>
   </div>
   <div class="last-updated">
-    Last updated <b id="last-updated">…</b>
+    <span id="live-price" class="dim">BTC <b style="color:var(--text);">…</b></span>
+    &nbsp;·&nbsp; data through <b id="last-updated">…</b>
     &nbsp;·&nbsp; <span id="trade-count" class="dim">0 trades</span>
     &nbsp;·&nbsp; <a href="#" id="refresh" style="color:var(--accent); text-decoration:none;">↻ refresh</a>
   </div>
@@ -982,6 +983,7 @@ let priceLines = [];             // entry/sl/tp lines drawn for the inspected tr
 let overlaySeries = [];          // line series for the trade-box overlay
 let markersByTime = {};          // time -> array of trades (for click lookup)
 let baseMarkers = [];            // markers from redrawMarkers (so we can re-apply with overlays)
+let pinned = false;              // when true, hover doesn't clear the inspected trade
 
 async function loadCandles(tf) {
   if (candleCache[tf]) return candleCache[tf];
@@ -1025,11 +1027,30 @@ async function renderChart() {
       borderUpColor: "#22c55e", borderDownColor: "#ef4444",
       wickUpColor: "#22c55e", wickDownColor: "#ef4444",
     });
-    // Click handler — find nearest marker
+    // Click handler — pin the trade box and details
     tvChart.subscribeClick(param => {
       if (!param.time) return;
       const trades = markersByTime[String(param.time)] || markersByTime[param.time];
-      if (trades && trades.length) showTradeDetail(trades);
+      if (trades && trades.length) { pinned = true; showTradeDetail(trades); }
+      else { pinned = false; clearOverlay(); }
+    });
+    // Hover preview — show rectangle on the trade under the cursor, dim others
+    tvChart.subscribeCrosshairMove(param => {
+      if (pinned) return;
+      if (!param.time) { clearOverlay(); return; }
+      // Find the closest marker by absolute time delta within ~3 buckets
+      const tNum = Number(param.time);
+      let best = null, bestDelta = Infinity;
+      for (const k of Object.keys(markersByTime)) {
+        const d = Math.abs(Number(k) - tNum);
+        if (d < bestDelta) { bestDelta = d; best = k; }
+      }
+      const stepSec = currentTF === "1w" ? 7*86400 : currentTF === "1d" ? 86400 : currentTF === "4h" ? 4*3600 : 3600;
+      if (best && bestDelta <= stepSec * 1.5) {
+        showTradeDetail(markersByTime[best], /*hover*/true);
+      } else {
+        clearOverlay();
+      }
     });
     new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(document.getElementById("tv-chart"));
   } else {
@@ -1129,10 +1150,14 @@ function clearOverlay() {
   document.getElementById("chart-grid").classList.remove("with-detail");
 }
 
-function showTradeDetail(trades) {
+function showTradeDetail(trades, hover=false) {
   // Use the first trade with full price data
   const t = trades.find(x => x.entry_price && x.sl_price && x.tp_price) || trades[0];
-  clearOverlay();
+  // Don't fully clear if just hovering — but remove old overlay series/lines
+  priceLines.forEach(l => tvCandles.removePriceLine(l));
+  priceLines = [];
+  overlaySeries.forEach(s => tvChart.removeSeries(s));
+  overlaySeries = [];
 
   const entryTime = trimToBucket(t.date);
   const candles = candleCache[currentTF] || [];
@@ -1175,12 +1200,22 @@ function showTradeDetail(trades) {
     if (t.sl_price)    seg(t.sl_price,    "rgba(239,68,68,0.85)");
     if (t.entry_price) seg(t.entry_price, "rgba(59,130,246,0.7)", true);
 
-    // Exit marker
+    // Dim all other markers, keep the selected trade bright + add exit marker
+    const dim = hex => {
+      const m = hex.match(/^#?([0-9a-f]{6})$/i);
+      if (!m) return hex;
+      const r = parseInt(m[1].slice(0,2),16), g = parseInt(m[1].slice(2,4),16), b = parseInt(m[1].slice(4,6),16);
+      return `rgba(${r},${g},${b},0.18)`;
+    };
+    const dimmed = baseMarkers.map(m => {
+      if (m.time === entryTime) return m; // keep selected bright
+      return { ...m, color: dim(m.color) };
+    });
     const exitShape = t.exit_reason === "tp_hit" ? "circle" :
                       t.exit_reason === "sl_hit" ? "circle" : "square";
     const exitColor = t.is_win ? "#22c55e" : t.is_loss ? "#ef4444" : "#eab308";
     tvCandles.setMarkers([
-      ...baseMarkers,
+      ...dimmed,
       {
         time: exitTime,
         position: "inBar",
@@ -1191,8 +1226,8 @@ function showTradeDetail(trades) {
     ]);
   }
 
-  // Auto-zoom: ±10 bars around entry, plus enough room for the full trade
-  if (entryIdx >= 0) {
+  // Auto-zoom only on pinned (click), not on hover — avoids violent panning while moving cursor
+  if (!hover && entryIdx >= 0) {
     const fromIdx = Math.max(0, entryIdx - 10);
     const toIdx = Math.min(candles.length - 1, Math.max(exitIdx, entryIdx) + 10);
     tvChart.timeScale().setVisibleRange({
@@ -1200,6 +1235,8 @@ function showTradeDetail(trades) {
       to: candles[toIdx].time,
     });
   }
+  // Side panel only on pinned (click)
+  if (hover) return;
 
   // Side panel
   const detail = document.getElementById("trade-detail-body");
@@ -1300,6 +1337,24 @@ document.getElementById("refresh").addEventListener("click", e => {
 // Auto-refresh every 5 min, plus on tab focus
 setInterval(loadLedger, 5 * 60 * 1000);
 window.addEventListener("focus", loadLedger);
+
+// Live BTC price (CoinGecko — free, no key, works in OH)
+async function loadLivePrice() {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true");
+    const j = await res.json();
+    const px = j.bitcoin?.usd;
+    const chg = j.bitcoin?.usd_24h_change;
+    if (px) {
+      const cls = chg >= 0 ? "green" : "red";
+      const arrow = chg >= 0 ? "▲" : "▼";
+      document.getElementById("live-price").innerHTML =
+        `BTC <b style="color:var(--text);">$${Math.round(px).toLocaleString()}</b> <span class="${cls}" style="font-size:11px;">${arrow} ${Math.abs(chg).toFixed(2)}%</span>`;
+    }
+  } catch (e) {}
+}
+loadLivePrice();
+setInterval(loadLivePrice, 60_000);
 
 // Boot
 loadLedger();
