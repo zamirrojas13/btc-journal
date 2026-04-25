@@ -1172,61 +1172,50 @@ function showTradeDetail(trades, hover=false) {
     : (entryIdx >= 0 ? Math.min(entryIdx + 1, candles.length - 1) : -1);
   const exitTime = exitIdx >= 0 ? candles[exitIdx].time : entryTime;
 
-  // Always draw axis price lines (full chart width) for entry/SL/TP labels
-  if (t.entry_price) priceLines.push(tvCandles.createPriceLine({
-    price: t.entry_price, color: "#3b82f6", lineWidth: 1, lineStyle: 2,
-    axisLabelVisible: true, title: "ENTRY",
-  }));
-  if (t.sl_price) priceLines.push(tvCandles.createPriceLine({
-    price: t.sl_price, color: "#ef4444", lineWidth: 1, lineStyle: 2,
-    axisLabelVisible: true, title: "SL",
-  }));
-  if (t.tp_price) priceLines.push(tvCandles.createPriceLine({
-    price: t.tp_price, color: "#22c55e", lineWidth: 1, lineStyle: 2,
-    axisLabelVisible: true, title: "TP",
-  }));
+  // Draw shaded rectangles bounded to the trade duration:
+  //   green zone from entry → TP   (above entry, profit area)
+  //   red zone   from entry → SL   (below entry, risk area)
+  if (entryIdx >= 0 && exitIdx > entryIdx && t.entry_price && t.tp_price && t.sl_price) {
+    const tpData = [], slData = [];
+    for (let i = entryIdx; i <= exitIdx; i++) {
+      tpData.push({ time: candles[i].time, value: t.tp_price });
+      slData.push({ time: candles[i].time, value: t.sl_price });
+    }
+    const tpZone = tvChart.addBaselineSeries({
+      baseValue: { type: "price", price: t.entry_price },
+      topFillColor1: "rgba(34,197,94,0.30)", topFillColor2: "rgba(34,197,94,0.05)",
+      bottomFillColor1: "rgba(34,197,94,0)", bottomFillColor2: "rgba(34,197,94,0)",
+      topLineColor: "rgba(34,197,94,0.7)", bottomLineColor: "rgba(34,197,94,0)",
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    tpZone.setData(tpData); overlaySeries.push(tpZone);
 
-  // Draw bounded TP/SL/entry segments only across the trade duration
-  if (entryIdx >= 0 && exitIdx > entryIdx) {
-    const seg = (price, color, dashed=false) => {
-      const data = [];
-      for (let i = entryIdx; i <= exitIdx; i++) data.push({ time: candles[i].time, value: price });
-      const s = tvChart.addLineSeries({
-        color, lineWidth: 2,
-        lineStyle: dashed ? 2 : 0,
-        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-      });
-      s.setData(data);
-      overlaySeries.push(s);
-    };
-    if (t.tp_price)    seg(t.tp_price,    "rgba(34,197,94,0.85)");
-    if (t.sl_price)    seg(t.sl_price,    "rgba(239,68,68,0.85)");
-    if (t.entry_price) seg(t.entry_price, "rgba(59,130,246,0.7)", true);
+    const slZone = tvChart.addBaselineSeries({
+      baseValue: { type: "price", price: t.entry_price },
+      topFillColor1: "rgba(239,68,68,0)", topFillColor2: "rgba(239,68,68,0)",
+      bottomFillColor1: "rgba(239,68,68,0.05)", bottomFillColor2: "rgba(239,68,68,0.30)",
+      topLineColor: "rgba(239,68,68,0)", bottomLineColor: "rgba(239,68,68,0.7)",
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    slZone.setData(slData); overlaySeries.push(slZone);
 
-    // Dim all other markers, keep the selected trade bright + add exit marker
+    // Dashed entry line spanning the trade
+    const entryLine = tvChart.addLineSeries({
+      color: "rgba(59,130,246,0.55)", lineWidth: 1, lineStyle: 2,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    });
+    entryLine.setData(tpData.map(d => ({ time: d.time, value: t.entry_price })));
+    overlaySeries.push(entryLine);
+
+    // Dim every OTHER marker so the inspected trade stands out
     const dim = hex => {
       const m = hex.match(/^#?([0-9a-f]{6})$/i);
       if (!m) return hex;
       const r = parseInt(m[1].slice(0,2),16), g = parseInt(m[1].slice(2,4),16), b = parseInt(m[1].slice(4,6),16);
-      return `rgba(${r},${g},${b},0.18)`;
+      return `rgba(${r},${g},${b},0.15)`;
     };
-    const dimmed = baseMarkers.map(m => {
-      if (m.time === entryTime) return m; // keep selected bright
-      return { ...m, color: dim(m.color) };
-    });
-    const exitShape = t.exit_reason === "tp_hit" ? "circle" :
-                      t.exit_reason === "sl_hit" ? "circle" : "square";
-    const exitColor = t.is_win ? "#22c55e" : t.is_loss ? "#ef4444" : "#eab308";
-    tvCandles.setMarkers([
-      ...dimmed,
-      {
-        time: exitTime,
-        position: "inBar",
-        color: exitColor,
-        shape: exitShape,
-        text: t.exit_reason ? t.exit_reason.replace("_", " ") : "exit",
-      },
-    ]);
+    const dimmed = baseMarkers.map(m => m.time === entryTime ? m : { ...m, color: dim(m.color) });
+    tvCandles.setMarkers(dimmed);
   }
 
   // Auto-zoom only on pinned (click), not on hover — avoids violent panning while moving cursor
