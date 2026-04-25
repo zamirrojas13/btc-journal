@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BTC Strategy Journal</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root {
+    --bg:        #0b0f17;
+    --bg-soft:   #131826;
+    --bg-hover:  #1a2030;
+    --border:    #1f2937;
+    --text:      #e5e7eb;
+    --text-dim:  #9ca3af;
+    --text-mute: #6b7280;
+    --green:     #22c55e;
+    --red:       #ef4444;
+    --yellow:    #eab308;
+    --blue:      #3b82f6;
+    --accent:    #f59e0b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+    -webkit-font-smoothing: antialiased; min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; padding: 16px 0 8px;
+    border-bottom: 1px solid var(--border); margin-bottom: 16px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-dot { width: 10px; height: 10px; background: var(--green); border-radius: 50%;
+               box-shadow: 0 0 12px var(--green); }
+  .brand-title { font-size: 18px; font-weight: 600; letter-spacing: 0.3px; }
+  .brand-sub { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+  .last-updated { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .last-updated b { color: var(--text); }
+  nav.tabs {
+    display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border); margin-bottom: 16px;
+    scrollbar-width: thin;
+  }
+  nav.tabs button {
+    background: transparent; color: var(--text-dim); border: 0;
+    padding: 10px 16px; font-size: 14px; cursor: pointer; font-family: inherit;
+    border-radius: 8px 8px 0 0; white-space: nowrap; transition: all 0.15s;
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs button:hover { color: var(--text); background: var(--bg-soft); }
+  nav.tabs button.active {
+    color: var(--text); border-bottom-color: var(--accent); background: var(--bg-soft);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .grid { display: grid; gap: 12px; }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .card {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+  }
+  .card-title {
+    font-size: 11px; color: var(--text-mute); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .card-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .card-explain { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.4; }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .yellow { color: var(--yellow); }
+  .blue { color: var(--blue); }
+  .dim { color: var(--text-dim); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+  }
+  .pill.green { background: rgba(34,197,94,.12); color: var(--green); }
+  .pill.red { background: rgba(239,68,68,.12); color: var(--red); }
+  .pill.yellow { background: rgba(234,179,8,.12); color: var(--yellow); }
+  .pill.blue { background: rgba(59,130,246,.12); color: var(--blue); }
+  .pill::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  }
+
+  /* Summary */
+  .period-toggle { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+  .period-toggle button {
+    background: var(--bg-soft); color: var(--text-dim); border: 1px solid var(--border);
+    padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 6px;
+    font-family: inherit;
+  }
+  .period-toggle button.active {
+    background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;
+  }
+  .narrative {
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; line-height: 1.7; font-size: 14px;
+  }
+  .narrative p { margin-bottom: 12px; }
+  .narrative h3 {
+    font-size: 16px; margin: 16px 0 8px; color: var(--accent); font-weight: 600;
+  }
+  .narrative .quote {
+    border-left: 3px solid var(--accent); padding-left: 12px; color: var(--text-dim);
+    font-style: italic; margin: 12px 0;
+  }
+  .trade-mini {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 12px;
+    align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .trade-mini:last-child { border-bottom: 0; }
+  .trade-mini .date { color: var(--text-mute); font-variant-numeric: tabular-nums; min-width: 80px; }
+  .trade-mini .reason { color: var(--text-dim); font-size: 12px; }
+  .trade-mini .pnl { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
+
+  /* Trade log table */
+  .table-wrap { overflow-x: auto; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; }
+  table.log { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 800px; }
+  table.log th {
+    text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--text-mute); border-bottom: 1px solid var(--border);
+    background: var(--bg); position: sticky; top: 0; cursor: pointer;
+    user-select: none;
+  }
+  table.log th:hover { color: var(--text); }
+  table.log th.sorted-asc::after { content: " ▲"; color: var(--accent); }
+  table.log th.sorted-desc::after { content: " ▼"; color: var(--accent); }
+  table.log td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  table.log tr:hover td { background: var(--bg-hover); }
+  table.log tr:last-child td { border-bottom: 0; }
+  .filter-bar {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .filter-bar select, .filter-bar input {
+    background: var(--bg-soft); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 10px; font-size: 13px; border-radius: 6px; font-family: inherit;
+  }
+  .reason-cell { color: var(--text-dim); font-size: 12px; max-width: 320px; }
+
+  /* Charts */
+  .chart-card { padding: 20px; }
+  .chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .chart-card .chart-explain {
+    font-size: 12px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5;
+  }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* Health Check */
+  .scorecard {
+    display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  .health-card {
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .health-header { display: flex; justify-content: space-between; align-items: center; }
+  .health-name { font-size: 13px; font-weight: 600; }
+  .health-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .health-bar {
+    height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; position: relative;
+  }
+  .health-bar-fill { height: 100%; transition: width 0.3s; border-radius: 3px; }
+  .health-explain { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .health-target { font-size: 11px; color: var(--text-mute); }
+
+  .empty {
+    text-align: center; padding: 40px; color: var(--text-mute);
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
+  }
+
+  @media (max-width: 600px) {
+    .container { padding: 12px; }
+    .brand-title { font-size: 16px; }
+    nav.tabs button { padding: 8px 12px; font-size: 13px; }
+    .card-value { font-size: 20px; }
+    .health-value { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <div class="brand-title">BTC Strategy Journal</div>
+      <div class="brand-sub">Scheme I + C3 + C5 · Multi-timeframe</div>
+    </div>
+  </div>
+  <div class="last-updated">
+    Last updated <b id="last-updated">…</b>
+    &nbsp;·&nbsp; <span id="trade-count" class="dim">0 trades</span>
+    &nbsp;·&nbsp; <a href="#" id="refresh" style="color:var(--accent); text-decoration:none;">↻ refresh</a>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="summary" class="active">📖 Summary</button>
+  <button data-tab="log">📋 Trade Log</button>
+  <button data-tab="chart">📈 Chart</button>
+  <button data-tab="dashboard">📊 Dashboard</button>
+  <button data-tab="health">💚 Health Check</button>
+</nav>
+
+<!-- ───── SUMMARY ───── -->
+<section class="panel active" id="panel-summary">
+  <div class="period-toggle" id="period-toggle">
+    <button data-period="week" class="active">This Week</button>
+    <button data-period="month">This Month</button>
+    <button data-period="year">This Year</button>
+    <button data-period="all">All Time</button>
+  </div>
+  <div id="summary-content"></div>
+</section>
+
+<!-- ───── TRADE LOG ───── -->
+<section class="panel" id="panel-log">
+  <div class="filter-bar">
+    <select id="filter-source">
+      <option value="">All sources</option>
+    </select>
+    <select id="filter-strat">
+      <option value="">All strategies</option>
+    </select>
+    <select id="filter-result">
+      <option value="">All results</option>
+      <option value="win">Wins only</option>
+      <option value="loss">Losses only</option>
+    </select>
+    <input type="search" id="filter-text" placeholder="Search…" />
+  </div>
+  <div class="table-wrap">
+    <table class="log" id="log-table">
+      <thead>
+        <tr>
+          <th data-sort="timestamp_entry">Date</th>
+          <th data-sort="strat">Strategy</th>
+          <th data-sort="direction">Side</th>
+          <th data-sort="entry_price">Entry</th>
+          <th data-sort="exit_price">Exit</th>
+          <th data-sort="r_multiple">R</th>
+          <th data-sort="pnl_pct">P&amp;L</th>
+          <th data-sort="exit_reason">Outcome</th>
+          <th>Why this trade</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ───── CHART ───── -->
+<section class="panel" id="panel-chart">
+  <div class="card" style="margin-bottom: 12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-size:14px;font-weight:600;">BTC/USD daily — trades plotted</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">
+          ▲ green up-arrow = winning long &nbsp;·&nbsp; ▲ red = losing long &nbsp;·&nbsp;
+          ▼ green down-arrow = winning short &nbsp;·&nbsp; ▼ red = losing short
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <select id="chart-source" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;">
+          <option value="backtest_scheme_i_plus_c3c5">Canonical backtest (241 trades)</option>
+          <option value="">All sources</option>
+        </select>
+        <button id="chart-fit" style="background:var(--bg-soft);color:var(--text-dim);border:1px solid var(--border);padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">Fit all</button>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="padding:8px;">
+    <div id="tv-chart" style="width:100%;height:560px;"></div>
+  </div>
+  <div class="card" style="margin-top:12px;font-size:12px;color:var(--text-dim);line-height:1.6;">
+    <b style="color:var(--text);">How to read this:</b> the candles are daily Bitcoin price.
+    Each arrow is a trade the strategy took. Click any arrow to see the date and outcome.
+    Pinch / scroll to zoom, drag to pan.
+  </div>
+</section>
+
+<!-- ───── DASHBOARD ───── -->
+<section class="panel" id="panel-dashboard">
+  <div class="grid grid-3" style="margin-bottom: 16px;">
+    <div class="card"><div class="card-title">Total Return</div><div class="card-value" id="dash-total">…</div><div class="card-sub" id="dash-total-sub">starting $10,000</div></div>
+    <div class="card"><div class="card-title">Win Rate</div><div class="card-value" id="dash-wr">…</div><div class="card-sub" id="dash-wr-sub"></div></div>
+    <div class="card"><div class="card-title">Profit Factor</div><div class="card-value" id="dash-pf">…</div><div class="card-sub">$ won per $ lost</div></div>
+    <div class="card"><div class="card-title">Avg R:R</div><div class="card-value" id="dash-rr">…</div><div class="card-sub">average per trade</div></div>
+    <div class="card"><div class="card-title">Max Drawdown</div><div class="card-value" id="dash-dd">…</div><div class="card-sub">worst peak-to-valley dip</div></div>
+    <div class="card"><div class="card-title">Trades</div><div class="card-value" id="dash-n">…</div><div class="card-sub" id="dash-n-sub"></div></div>
+  </div>
+  <div class="grid grid-2">
+    <div class="card chart-card">
+      <h3>Equity Curve</h3>
+      <div class="chart-explain">How much $10,000 would have grown trading this strategy. Going up = strategy is making money over time.</div>
+      <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
+    </div>
+    <div class="card chart-card">
+      <h3>Drawdown</h3>
+      <div class="chart-explain">How far below the highest point the account dropped. Closer to 0% is better; deep dips hurt psychology and capital.</div>
+      <div class="chart-wrap"><canvas id="chart-dd"></canvas></div>
+    </div>
+    <div class="card chart-card">
+      <h3>Wins vs Losses by Strategy</h3>
+      <div class="chart-explain">Each bar = one of the 10 setups. Green = winning trades, red = losing trades. Tells you which setups carry the strategy.</div>
+      <div class="chart-wrap"><canvas id="chart-strat"></canvas></div>
+    </div>
+    <div class="card chart-card">
+      <h3>Monthly Return</h3>
+      <div class="chart-explain">Each bar = one calendar month's performance. Green months above zero, red below. Helps spot streaks and dry spells.</div>
+      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───── HEALTH CHECK ───── -->
+<section class="panel" id="panel-health">
+  <div class="card" style="margin-bottom: 16px;">
+    <div class="card-title">Overall status</div>
+    <div class="card-value"><span id="health-overall">…</span></div>
+    <div class="card-explain" id="health-overall-text"></div>
+  </div>
+  <div class="scorecard" id="scorecard"></div>
+</section>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════
+const LEDGER_URL = "trades_ledger.csv";
+
+// Canonical baseline (from validated 2017-08 → 2026-04 backtest)
+const BASELINE = {
+  trades: 241,
+  total_pct: 2215.0,
+  cagr: 44.6,
+  wr: 47.3,
+  pf: 1.97,
+  dd: -32.6,
+};
+
+// Plain-English description per strategy.
+const STRAT_INFO = {
+  "T1a_W_fail_brkdn_long":       { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly chart broke below its 20-week low and snapped back. Panic seller exhaustion → bullish reversal." },
+  "T1b_W_rsi_os_long":           { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly RSI was deeply oversold (<35) and crossed back above 38 on a green candle. Momentum has flipped." },
+  "T1c_D_sstar_short":           { tier: 1, tf: "daily",   side: "short", blurb: "Daily shooting star at a 20-day high while the weekly is 20%+ above its EMA200. Classic euphoria peak." },
+  "T1d_H4_sweep_hi_short":       { tier: 1, tf: "4-hour",  side: "short", blurb: "4-hour swept above the 20-bar high and closed back inside, in a daily downtrend. Liquidity grab fade." },
+  "T2a_D_hammer_long":           { tier: 2, tf: "daily",   side: "long",  blurb: "Daily hammer at a 20-day low with weekly RSI bullish. Buyers are stepping in at support." },
+  "T2b_W_sweep_hi_short":        { tier: 2, tf: "weekly",  side: "short", blurb: "Weekly swept its 20-week high after a strong rally, closed red. Overextension fade." },
+  "T3a_H1_fail_brkdn_long":      { tier: 3, tf: "1-hour",  side: "long",  blurb: "1-hour broke its 20-bar low and snapped back above EMA50. Quick failed breakdown — fade the dip." },
+  "T3b_H4_sweep_hi_short_loose": { tier: 3, tf: "4-hour",  side: "short", blurb: "4-hour swept its 20-bar high in a downtrend with hot RSI. Counter-trend rejection." },
+  "C3_W_engulf_long":            { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly bullish engulfing after an oversold reading. Strong reversal signal." },
+  "C5_W_hammer_20w_low_long":    { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly hammer right at the 20-week low with a low RSI. Capitulation buy." },
+};
+
+const TIER_LABEL = { 1: "Elite", 2: "Solid", 3: "Standard", 4: "Speculative" };
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let LEDGER = [];
+let charts = {};
+let logSort = { col: "timestamp_entry", dir: "desc" };
+
+// ═══════════════════════════════════════════════════════════════════
+// LOAD
+// ═══════════════════════════════════════════════════════════════════
+async function loadLedger() {
+  try {
+    const res = await fetch(LEDGER_URL + "?t=" + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: true });
+    LEDGER = parsed.data
+      .filter(r => r.trade_id)
+      .map(r => ({
+        ...r,
+        date: r.timestamp_entry ? new Date(r.timestamp_entry) : null,
+        is_win: r.pnl_pct != null && r.pnl_pct > 0,
+        is_loss: r.pnl_pct != null && r.pnl_pct < 0,
+      }))
+      .sort((a, b) => (a.date && b.date) ? a.date - b.date : 0);
+  } catch (e) {
+    document.getElementById("summary-content").innerHTML =
+      `<div class="empty">Could not load <code>trades_ledger.csv</code>.<br><br>If you opened this file directly with <code>file://</code>, browsers block reading sibling CSVs. Either:<br>(1) run a tiny local server: <code>python -m http.server</code> in this folder, then open http://localhost:8000<br>(2) push to GitHub Pages and open the URL.<br><br><span class="dim">${e.message}</span></div>`;
+    throw e;
+  }
+  render();
+}
+
+function render() {
+  const lastDate = LEDGER.filter(r => r.date).map(r => r.date).sort((a,b) => b-a)[0];
+  document.getElementById("last-updated").textContent =
+    lastDate ? lastDate.toISOString().split("T")[0] : "n/a";
+  document.getElementById("trade-count").textContent = `${LEDGER.length} trades`;
+  renderSummary();
+  renderLog();
+  renderDashboard();
+  renderHealth();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════
+const fmtPct = v => v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
+const fmtPctRaw = v => v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+const fmtUsd = v => v == null || isNaN(v) ? "—" : "$" + Number(v).toLocaleString(undefined, {maximumFractionDigits: 0});
+const fmtNum = (v, d=2) => v == null || isNaN(v) ? "—" : Number(v).toFixed(d);
+const fmtDate = d => d ? d.toISOString().split("T")[0] : "—";
+
+function ymd(d) { return d.toISOString().split("T")[0]; }
+function ym(d)  { return d.toISOString().slice(0,7); }
+
+function classify(value, baseline, tolerance, biggerIsBetter=true) {
+  // Returns 'green', 'yellow', 'red' based on drift vs baseline.
+  if (value == null || isNaN(value) || baseline == null) return "yellow";
+  const diff = biggerIsBetter ? (value - baseline) : (baseline - value);
+  const pct = Math.abs(diff) / Math.abs(baseline);
+  if (diff >= 0) return "green";
+  if (pct <= tolerance) return "yellow";
+  return "red";
+}
+
+function periodFilter(period) {
+  if (period === "all") return _ => true;
+  const now = new Date();
+  let cutoff;
+  if (period === "week")  { cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 7); }
+  if (period === "month") { cutoff = new Date(now); cutoff.setMonth(cutoff.getMonth() - 1); }
+  if (period === "year")  { cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear() - 1); }
+  return r => r.date && r.date >= cutoff;
+}
+
+function computeStats(trades) {
+  if (!trades.length) return null;
+  const wins = trades.filter(t => t.is_win);
+  const losses = trades.filter(t => t.is_loss);
+  const sumWin = wins.reduce((s,t) => s + (t.pnl_pct || 0), 0);
+  const sumLoss = losses.reduce((s,t) => s + (t.pnl_pct || 0), 0);
+  const wr = wins.length / trades.length * 100;
+  const pf = sumLoss === 0 ? 99 : sumWin / -sumLoss;
+  const rs = trades.map(t => t.r_multiple).filter(v => v != null && !isNaN(v));
+  const avgR = rs.length ? rs.reduce((s,v) => s+v, 0) / rs.length : null;
+
+  // Equity curve from per-trade pct (compounded as if 1R = 5%, but we just use pnl_pct directly here)
+  let eq = 10000;
+  const curve = [{ date: trades[0].date, equity: eq }];
+  let peak = eq, maxDD = 0;
+  trades.forEach(t => {
+    if (t.pnl_pct == null || isNaN(t.pnl_pct)) return;
+    eq = eq * (1 + t.pnl_pct);
+    curve.push({ date: t.date, equity: eq });
+    if (eq > peak) peak = eq;
+    const dd = (eq / peak - 1) * 100;
+    if (dd < maxDD) maxDD = dd;
+  });
+  const totalPct = (eq / 10000 - 1) * 100;
+  return {
+    n: trades.length, wins: wins.length, losses: losses.length,
+    wr, pf, avgR, totalPct, maxDD, curve, finalEq: eq,
+  };
+}
+
+function backtestOnly() {
+  return LEDGER.filter(r => r.source === "backtest_scheme_i_plus_c3c5");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUMMARY (narrative)
+// ═══════════════════════════════════════════════════════════════════
+let currentPeriod = "week";
+
+function renderSummary() {
+  const filt = periodFilter(currentPeriod);
+  const trades = LEDGER.filter(filt).filter(r => r.pnl_pct != null);
+  const stats = computeStats(trades);
+  const el = document.getElementById("summary-content");
+
+  if (!stats) {
+    const periodWord = { week: "week", month: "month", year: "year", all: "period" }[currentPeriod];
+    el.innerHTML = `<div class="empty">
+      <h3 style="color:var(--text);margin-bottom:8px;">No trades this ${periodWord}.</h3>
+      <p>The strategy is patient — it only fires on high-quality setups. A quiet ${periodWord} is not a problem; it's the system filtering out noise.</p>
+    </div>`;
+    return;
+  }
+
+  const winNarrative = stats.wins > stats.losses ? "more wins than losses" :
+                       stats.wins < stats.losses ? "more losses than wins" :
+                       "an even split between wins and losses";
+  const moneyDir = stats.totalPct > 0 ? "up" : "down";
+  const moneyClass = stats.totalPct > 0 ? "green" : "red";
+
+  // Top winners and losers
+  const sortedByPnl = [...trades].sort((a,b) => (b.pnl_pct||0) - (a.pnl_pct||0));
+  const bestTrade = sortedByPnl[0];
+  const worstTrade = sortedByPnl[sortedByPnl.length - 1];
+
+  const tradeMini = t => {
+    const info = STRAT_INFO[t.strat] || STRAT_INFO[t.setup_type] || { blurb: "—", tf: t.timeframe || "—", side: t.direction };
+    const cls = (t.pnl_pct || 0) >= 0 ? "green" : "red";
+    return `<div class="trade-mini">
+      <div class="date">${fmtDate(t.date)}</div>
+      <div>
+        <div><b>${(t.strat || t.setup_type || "—").replace(/_/g," ")}</b> <span class="dim">· ${info.tf} · ${info.side}</span></div>
+        <div class="reason">${info.blurb}</div>
+      </div>
+      <div class="pnl ${cls}">${fmtPct(t.pnl_pct)}</div>
+    </div>`;
+  };
+
+  const periodLabel = {
+    week: "the past 7 days", month: "the past month", year: "the past year", all: "all time"
+  }[currentPeriod];
+
+  let html = `
+    <div class="grid grid-3" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">Trades</div>
+        <div class="card-value">${stats.n}</div>
+        <div class="card-sub">${stats.wins} wins · ${stats.losses} losses</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Win rate</div>
+        <div class="card-value">${stats.wr.toFixed(0)}%</div>
+        <div class="card-sub">vs ${BASELINE.wr.toFixed(0)}% long-term average</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Account change</div>
+        <div class="card-value ${moneyClass}">${fmtPctRaw(stats.totalPct)}</div>
+        <div class="card-sub">if you risked 100% per trade · for relative scale only</div>
+      </div>
+    </div>
+
+    <div class="narrative">
+      <h3>What happened ${periodLabel}</h3>
+      <p>The strategy fired <b>${stats.n} trade${stats.n===1?"":"s"}</b> — ${winNarrative}. Account is <span class="${moneyClass}"><b>${moneyDir} ${fmtPctRaw(Math.abs(stats.totalPct))}</b></span> for the period.</p>
+
+      ${bestTrade ? `<h3>Best trade</h3>${tradeMini(bestTrade)}` : ""}
+      ${worstTrade && worstTrade !== bestTrade ? `<h3>Worst trade</h3>${tradeMini(worstTrade)}` : ""}
+
+      <h3>All trades this period</h3>
+      ${trades.slice().reverse().map(tradeMini).join("")}
+
+      <div class="quote">
+        ${stats.n < 3 ?
+          "Few trades is normal for this strategy — it waits for premium setups across multiple timeframes. Patience is part of the edge." :
+          stats.wr >= 50 ?
+            "Win rate is healthy. The system is finding high-conviction setups." :
+            "Win rate is below 50% — that's expected when reward-to-risk is well above 1:1. The math still favors the strategy as long as the wins are larger than the losses (they usually are)."}
+      </div>
+    </div>
+  `;
+  el.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TRADE LOG
+// ═══════════════════════════════════════════════════════════════════
+function renderLog() {
+  // Populate filters once
+  const sources = [...new Set(LEDGER.map(r => r.source).filter(Boolean))].sort();
+  const strats = [...new Set(LEDGER.map(r => r.strat || r.setup_type).filter(Boolean))].sort();
+  const sourceSel = document.getElementById("filter-source");
+  const stratSel = document.getElementById("filter-strat");
+  if (sourceSel.options.length <= 1) {
+    sources.forEach(s => sourceSel.add(new Option(s, s)));
+    strats.forEach(s => stratSel.add(new Option(s, s)));
+  }
+  drawLogRows();
+}
+
+function drawLogRows() {
+  const fs = document.getElementById("filter-source").value;
+  const fst = document.getElementById("filter-strat").value;
+  const fr = document.getElementById("filter-result").value;
+  const ft = document.getElementById("filter-text").value.toLowerCase();
+
+  let rows = LEDGER.filter(r => {
+    if (fs && r.source !== fs) return false;
+    const strat = r.strat || r.setup_type;
+    if (fst && strat !== fst) return false;
+    if (fr === "win" && !r.is_win) return false;
+    if (fr === "loss" && !r.is_loss) return false;
+    if (ft) {
+      const blob = (r.strat||"") + " " + (r.setup_type||"") + " " + (r.exit_reason||"") + " " + (r.notes||"");
+      if (!blob.toLowerCase().includes(ft)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a,b) => {
+    const va = a[logSort.col], vb = b[logSort.col];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va < vb) return logSort.dir === "asc" ? -1 : 1;
+    if (va > vb) return logSort.dir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  // Update header arrows
+  document.querySelectorAll("#log-table th").forEach(th => {
+    th.classList.remove("sorted-asc", "sorted-desc");
+    if (th.dataset.sort === logSort.col) {
+      th.classList.add(logSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+    }
+  });
+
+  const tbody = document.querySelector("#log-table tbody");
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:30px;">No trades match.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.slice(0, 500).map(r => {
+    const strat = r.strat || r.setup_type || "—";
+    const info = STRAT_INFO[strat] || { blurb: "—" };
+    const dirCls = r.direction === "long" ? "green" : "red";
+    const pnlCls = (r.pnl_pct || 0) > 0 ? "green" : (r.pnl_pct || 0) < 0 ? "red" : "dim";
+    const outcomePill =
+      r.exit_reason === "tp_hit"   ? `<span class="pill green">Take profit</span>` :
+      r.exit_reason === "sl_hit"   ? `<span class="pill red">Stop loss</span>` :
+      r.exit_reason === "time_exit"? `<span class="pill yellow">Time exit</span>` :
+      r.exit_reason ? `<span class="pill blue">${r.exit_reason}</span>` : "—";
+    return `<tr>
+      <td>${fmtDate(r.date)}</td>
+      <td><b>${strat.replace(/_/g," ")}</b></td>
+      <td class="${dirCls}">${(r.direction||"").toUpperCase()}</td>
+      <td>${r.entry_price ? fmtUsd(r.entry_price) : "—"}</td>
+      <td>${r.exit_price ? fmtUsd(r.exit_price) : "—"}</td>
+      <td class="${pnlCls}">${r.r_multiple != null ? fmtNum(r.r_multiple,2)+"R" : "—"}</td>
+      <td class="${pnlCls}">${fmtPct(r.pnl_pct)}</td>
+      <td>${outcomePill}</td>
+      <td class="reason-cell">${info.blurb}</td>
+    </tr>`;
+  }).join("");
+  if (rows.length > 500) {
+    tbody.innerHTML += `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:12px;">Showing 500 of ${rows.length}. Use filters to narrow.</td></tr>`;
+  }
+}
+
+document.querySelectorAll("#log-table th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const col = th.dataset.sort;
+    if (logSort.col === col) logSort.dir = logSort.dir === "asc" ? "desc" : "asc";
+    else { logSort.col = col; logSort.dir = "desc"; }
+    drawLogRows();
+  });
+});
+["filter-source","filter-strat","filter-result","filter-text"].forEach(id => {
+  document.getElementById(id).addEventListener("input", drawLogRows);
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════
+function renderDashboard() {
+  const trades = backtestOnly().length ? backtestOnly() : LEDGER.filter(r => r.pnl_pct != null);
+  const stats = computeStats(trades);
+  if (!stats) return;
+
+  document.getElementById("dash-total").textContent = fmtPctRaw(stats.totalPct);
+  document.getElementById("dash-total").className = "card-value " + (stats.totalPct >= 0 ? "green" : "red");
+  document.getElementById("dash-total-sub").textContent = `${fmtUsd(10000)} → ${fmtUsd(stats.finalEq)}`;
+  document.getElementById("dash-wr").textContent = stats.wr.toFixed(1) + "%";
+  document.getElementById("dash-wr-sub").textContent = `${stats.wins}W / ${stats.losses}L`;
+  document.getElementById("dash-pf").textContent = fmtNum(stats.pf, 2);
+  document.getElementById("dash-rr").textContent = stats.avgR != null ? fmtNum(stats.avgR, 2) + "R" : "—";
+  document.getElementById("dash-dd").textContent = fmtPctRaw(stats.maxDD);
+  document.getElementById("dash-dd").className = "card-value red";
+  document.getElementById("dash-n").textContent = stats.n;
+  document.getElementById("dash-n-sub").textContent = `${(stats.n / Math.max(1, (new Date() - trades[0].date) / (365.25*86400000))).toFixed(0)} per year`;
+
+  drawEquity(stats.curve);
+  drawDrawdown(stats.curve);
+  drawStratBars(trades);
+  drawMonthly(trades);
+}
+
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); charts[key] = null; }
+}
+
+function drawEquity(curve) {
+  destroyChart("equity");
+  const ctx = document.getElementById("chart-equity").getContext("2d");
+  charts.equity = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: curve.map(p => p.date),
+      datasets: [{
+        data: curve.map(p => p.equity),
+        borderColor: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)",
+        fill: true, tension: 0.1, borderWidth: 2, pointRadius: 0,
+      }],
+    },
+    options: chartOpts({ y: { ticks: { callback: v => "$" + (v/1000).toFixed(0) + "k" } } }),
+  });
+}
+
+function drawDrawdown(curve) {
+  destroyChart("dd");
+  let peak = 0;
+  const dd = curve.map(p => {
+    peak = Math.max(peak, p.equity);
+    return { date: p.date, dd: (p.equity / peak - 1) * 100 };
+  });
+  const ctx = document.getElementById("chart-dd").getContext("2d");
+  charts.dd = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: dd.map(p => p.date),
+      datasets: [{
+        data: dd.map(p => p.dd),
+        borderColor: "#ef4444", backgroundColor: "rgba(239,68,68,0.15)",
+        fill: true, tension: 0, borderWidth: 1.5, pointRadius: 0,
+      }],
+    },
+    options: chartOpts({ y: { ticks: { callback: v => v.toFixed(0) + "%" }, max: 0 } }),
+  });
+}
+
+function drawStratBars(trades) {
+  destroyChart("strat");
+  const byStrat = {};
+  trades.forEach(t => {
+    const s = t.strat || t.setup_type;
+    if (!s) return;
+    if (!byStrat[s]) byStrat[s] = { w: 0, l: 0 };
+    if (t.is_win) byStrat[s].w++;
+    if (t.is_loss) byStrat[s].l++;
+  });
+  const labels = Object.keys(byStrat);
+  const ctx = document.getElementById("chart-strat").getContext("2d");
+  charts.strat = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: labels.map(s => s.replace(/_/g," ")),
+      datasets: [
+        { label: "Wins",   data: labels.map(s => byStrat[s].w),  backgroundColor: "#22c55e" },
+        { label: "Losses", data: labels.map(s => byStrat[s].l),  backgroundColor: "#ef4444" },
+      ],
+    },
+    options: chartOpts({ x: { stacked: true, ticks: { autoSkip: false, font: { size: 9 } } }, y: { stacked: true } }, true),
+  });
+}
+
+function drawMonthly(trades) {
+  destroyChart("monthly");
+  const byMonth = {};
+  trades.forEach(t => {
+    if (!t.date || t.pnl_pct == null) return;
+    const key = ym(t.date);
+    if (!byMonth[key]) byMonth[key] = 0;
+    byMonth[key] += t.pnl_pct * 100;
+  });
+  const labels = Object.keys(byMonth).sort();
+  const data = labels.map(k => byMonth[k]);
+  const ctx = document.getElementById("chart-monthly").getContext("2d");
+  charts.monthly = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: data.map(v => v >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"),
+      }],
+    },
+    options: chartOpts({ y: { ticks: { callback: v => v.toFixed(0) + "%" } } }),
+  });
+}
+
+function chartOpts(scaleOverrides = {}, showLegend = false) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: showLegend, labels: { color: "#9ca3af" } } },
+    scales: {
+      x: Object.assign({
+        type: charts._cat ? undefined : (scaleOverrides.x?.stacked ? "category" : "time"),
+        time: { unit: "year" },
+        grid: { color: "rgba(255,255,255,0.04)" },
+        ticks: { color: "#6b7280", font: { size: 10 } },
+      }, scaleOverrides.x || {}),
+      y: Object.assign({
+        grid: { color: "rgba(255,255,255,0.04)" },
+        ticks: { color: "#6b7280", font: { size: 10 } },
+      }, scaleOverrides.y || {}),
+    },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HEALTH CHECK
+// ═══════════════════════════════════════════════════════════════════
+function renderHealth() {
+  const trades = backtestOnly().length ? backtestOnly() : LEDGER.filter(r => r.pnl_pct != null);
+  const stats = computeStats(trades);
+  if (!stats) return;
+
+  // Each metric: name, current, baseline, color, plain-English explanation
+  const checks = [
+    {
+      name: "Win rate",
+      value: stats.wr,
+      baseline: BASELINE.wr,
+      unit: "%",
+      color: classify(stats.wr, BASELINE.wr, 0.10, true),
+      explain: `Out of every 100 trades, this strategy wins about <b>${stats.wr.toFixed(0)}</b>. Long-term average is ${BASELINE.wr.toFixed(0)}%. A win rate below 50% is fine when the wins are bigger than the losses — see Profit Factor below.`,
+    },
+    {
+      name: "Profit factor",
+      value: stats.pf,
+      baseline: BASELINE.pf,
+      unit: "",
+      color: classify(stats.pf, BASELINE.pf, 0.15, true),
+      explain: `For every $1 lost, the strategy makes <b>$${stats.pf.toFixed(2)}</b>. Above 1.5 is healthy. Long-term average is ${BASELINE.pf}.`,
+    },
+    {
+      name: "Total return",
+      value: stats.totalPct,
+      baseline: BASELINE.total_pct,
+      unit: "%",
+      color: classify(stats.totalPct, BASELINE.total_pct, 0.20, true),
+      explain: `If you started with $10,000 and risked your full account every trade, you'd be at <b>${fmtUsd(stats.finalEq)}</b>. This is a relative scale; real-world position sizing uses 5% per trade.`,
+    },
+    {
+      name: "Max drawdown",
+      value: stats.maxDD,
+      baseline: BASELINE.dd,
+      unit: "%",
+      color: stats.maxDD <= BASELINE.dd * 1.15 ? "green" : stats.maxDD <= BASELINE.dd * 1.30 ? "yellow" : "red",
+      explain: `Worst dip from a new high was <b>${stats.maxDD.toFixed(1)}%</b>. Baseline allows up to ${BASELINE.dd}%. If the current number gets worse than that, the strategy may be drifting.`,
+    },
+    {
+      name: "Trade frequency",
+      value: stats.n,
+      baseline: BASELINE.trades,
+      unit: " trades",
+      color: stats.n >= BASELINE.trades * 0.95 ? "green" : "yellow",
+      explain: `<b>${stats.n}</b> trades have been recorded vs ${BASELINE.trades} expected. The strategy is selective — fewer trades is normal during quiet markets.`,
+    },
+    {
+      name: "Recent activity",
+      value: lastTradeDays(),
+      baseline: 14,
+      unit: " days ago",
+      color: lastTradeDays() <= 30 ? "green" : lastTradeDays() <= 60 ? "yellow" : "red",
+      explain: `Last triggered trade was <b>${lastTradeDays()} days ago</b>. The strategy averages a trade every ~13 days. A long quiet stretch is OK, but >60 days warrants checking the data feed.`,
+    },
+  ];
+
+  const colorScore = { green: 2, yellow: 1, red: 0 };
+  const total = checks.reduce((s,c) => s + colorScore[c.color], 0);
+  const max = checks.length * 2;
+  const pct = total / max;
+  const overallColor = pct >= 0.85 ? "green" : pct >= 0.6 ? "yellow" : "red";
+  const overallText = {
+    green: "Strategy is on track. All key metrics are within healthy bands. Keep running.",
+    yellow: "Some metrics are drifting from the baseline. Not a panic — review which checks are yellow and watch the trend over the next few weeks.",
+    red: "One or more metrics are well outside expected ranges. Investigate before relying on the strategy. Don't size up.",
+  }[overallColor];
+  document.getElementById("health-overall").innerHTML = `<span class="pill ${overallColor}">${overallColor.toUpperCase()}</span>`;
+  document.getElementById("health-overall-text").innerHTML = overallText;
+
+  document.getElementById("scorecard").innerHTML = checks.map(c => {
+    const valStr = typeof c.value === "number" ? c.value.toFixed(c.unit === "%" ? 1 : c.unit === "" ? 2 : 0) : c.value;
+    return `<div class="health-card">
+      <div class="health-header">
+        <div class="health-name">${c.name}</div>
+        <span class="pill ${c.color}">${c.color}</span>
+      </div>
+      <div class="health-value ${c.color}">${valStr}${c.unit}</div>
+      <div class="health-target">target: ${c.baseline}${c.unit}</div>
+      <div class="health-explain">${c.explain}</div>
+    </div>`;
+  }).join("");
+}
+
+function lastTradeDays() {
+  const dates = LEDGER.filter(r => r.date && r.pnl_pct != null).map(r => r.date);
+  if (!dates.length) return 999;
+  const last = dates.sort((a,b) => b-a)[0];
+  return Math.floor((new Date() - last) / 86400000);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CHART (TradingView Lightweight Charts)
+// ═══════════════════════════════════════════════════════════════════
+let tvChart = null, tvCandles = null, tvCandleData = null, chartLoaded = false;
+
+async function loadChartData() {
+  if (tvCandleData) return tvCandleData;
+  try {
+    const res = await fetch("chart_data.json?t=" + Date.now());
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    tvCandleData = await res.json();
+    return tvCandleData;
+  } catch (e) {
+    document.getElementById("tv-chart").innerHTML =
+      `<div class="empty" style="margin:20px;">Could not load <code>chart_data.json</code>. Run <code>python weekly_health_check.py</code> once to generate it. <span class="dim">(${e.message})</span></div>`;
+    return null;
+  }
+}
+
+async function renderChart() {
+  if (chartLoaded) { redrawMarkers(); return; }
+  const candles = await loadChartData();
+  if (!candles) return;
+
+  const container = document.getElementById("tv-chart");
+  container.innerHTML = "";
+  tvChart = LightweightCharts.createChart(container, {
+    layout: { background: { color: "#0b0f17" }, textColor: "#9ca3af", fontSize: 11 },
+    grid:   { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+    rightPriceScale: { borderColor: "#1f2937" },
+    timeScale: { borderColor: "#1f2937", timeVisible: false, secondsVisible: false },
+    crosshair: { mode: 1 },
+    autoSize: true,
+  });
+  tvCandles = tvChart.addCandlestickSeries({
+    upColor: "#22c55e", downColor: "#ef4444",
+    borderUpColor: "#22c55e", borderDownColor: "#ef4444",
+    wickUpColor: "#22c55e", wickDownColor: "#ef4444",
+  });
+  tvCandles.setData(candles);
+  chartLoaded = true;
+  redrawMarkers();
+
+  new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(container);
+}
+
+function redrawMarkers() {
+  if (!tvCandles) return;
+  const src = document.getElementById("chart-source").value;
+  let trades = LEDGER.filter(r => r.date && r.pnl_pct != null);
+  if (src) trades = trades.filter(r => r.source === src);
+
+  // Group same-day trades to dedupe overlapping arrows
+  const byDay = {};
+  trades.forEach(t => {
+    const day = ymd(t.date);
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(t);
+  });
+
+  const markers = Object.entries(byDay).map(([day, ts]) => {
+    const isLong = ts.some(t => t.direction === "long");
+    const won = ts.every(t => t.is_win);
+    const lost = ts.every(t => t.is_loss);
+    const color = won ? "#22c55e" : lost ? "#ef4444" : "#eab308";
+    const strats = [...new Set(ts.map(t => (t.strat||t.setup_type||"").replace(/_/g," ")))].join(", ");
+    const totalPnl = ts.reduce((s,t) => s + (t.pnl_pct||0), 0);
+    return {
+      time: day,
+      position: isLong ? "belowBar" : "aboveBar",
+      color,
+      shape: isLong ? "arrowUp" : "arrowDown",
+      text: `${ts.length>1 ? ts.length+"× " : ""}${(totalPnl*100).toFixed(1)}%`,
+    };
+  }).sort((a,b) => a.time.localeCompare(b.time));
+
+  tvCandles.setMarkers(markers);
+}
+
+document.getElementById("chart-source").addEventListener("change", redrawMarkers);
+document.getElementById("chart-fit").addEventListener("click", () => tvChart && tvChart.timeScale().fitContent());
+
+// ═══════════════════════════════════════════════════════════════════
+// TAB / EVENT WIRING
+// ═══════════════════════════════════════════════════════════════════
+document.querySelectorAll("nav.tabs button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("panel-" + b.dataset.tab).classList.add("active");
+    if (b.dataset.tab === "chart") renderChart();
+  });
+});
+
+document.querySelectorAll("#period-toggle button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#period-toggle button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    currentPeriod = b.dataset.period;
+    renderSummary();
+  });
+});
+
+document.getElementById("refresh").addEventListener("click", e => {
+  e.preventDefault();
+  loadLedger();
+});
+
+// Auto-refresh every 5 min, plus on tab focus
+setInterval(loadLedger, 5 * 60 * 1000);
+window.addEventListener("focus", loadLedger);
+
+// Boot
+loadLedger();
+</script>
+</body>
+</html>
