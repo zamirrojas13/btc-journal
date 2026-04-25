@@ -174,6 +174,23 @@
   .health-explain { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
   .health-target { font-size: 11px; color: var(--text-mute); }
 
+  .seg { display: inline-flex; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    background: transparent; color: var(--text-dim); border: 0; padding: 6px 12px;
+    font-size: 12px; cursor: pointer; font-family: inherit; border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.active { background: var(--accent); color: var(--bg); font-weight: 600; }
+  .seg button:hover:not(.active) { color: var(--text); background: var(--bg-hover); }
+
+  @media (min-width: 900px) {
+    #chart-grid.with-detail { grid-template-columns: 1fr 320px !important; }
+  }
+  #trade-detail .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  #trade-detail .row:last-child { border-bottom: 0; }
+  #trade-detail .row .k { color: var(--text-mute); }
+  #trade-detail .row .v { font-variant-numeric: tabular-nums; }
+
   .empty {
     text-align: center; padding: 40px; color: var(--text-mute);
     background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
@@ -266,28 +283,51 @@
   <div class="card" style="margin-bottom: 12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
       <div>
-        <div style="font-size:14px;font-weight:600;">BTC/USD daily — trades plotted</div>
+        <div style="font-size:14px;font-weight:600;">BTC/USD — trades plotted</div>
         <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">
-          ▲ green up-arrow = winning long &nbsp;·&nbsp; ▲ red = losing long &nbsp;·&nbsp;
-          ▼ green down-arrow = winning short &nbsp;·&nbsp; ▼ red = losing short
+          ▲ green = winning long · ▲ red = losing long · ▼ green = winning short · ▼ red = losing short ·
+          <b style="color:var(--accent);">click any arrow</b> to inspect the trade
         </div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <select id="chart-source" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;">
-          <option value="backtest_scheme_i_plus_c3c5">Canonical backtest (241 trades)</option>
-          <option value="">All sources</option>
-        </select>
-        <button id="chart-fit" style="background:var(--bg-soft);color:var(--text-dim);border:1px solid var(--border);padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">Fit all</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">
+      <div class="seg" id="tf-toggle">
+        <button data-tf="1w">1W</button>
+        <button data-tf="1d" class="active">1D</button>
+        <button data-tf="4h">4H</button>
+        <button data-tf="1h">1H</button>
       </div>
+      <div class="seg" id="range-toggle">
+        <button data-range="1M">1M</button>
+        <button data-range="3M">3M</button>
+        <button data-range="1Y">1Y</button>
+        <button data-range="3Y">3Y</button>
+        <button data-range="all" class="active">All</button>
+      </div>
+      <select id="chart-source" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;">
+        <option value="backtest_scheme_i_plus_c3c5">Canonical backtest (241 trades)</option>
+        <option value="">All sources</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="show-wins" checked> wins
+      </label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="show-losses" checked> losses
+      </label>
+      <button id="chart-clear" style="background:var(--bg-soft);color:var(--text-dim);border:1px solid var(--border);padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">Clear overlay</button>
     </div>
   </div>
-  <div class="card" style="padding:8px;">
-    <div id="tv-chart" style="width:100%;height:560px;"></div>
-  </div>
-  <div class="card" style="margin-top:12px;font-size:12px;color:var(--text-dim);line-height:1.6;">
-    <b style="color:var(--text);">How to read this:</b> the candles are daily Bitcoin price.
-    Each arrow is a trade the strategy took. Click any arrow to see the date and outcome.
-    Pinch / scroll to zoom, drag to pan.
+  <div style="display:grid;grid-template-columns:1fr;gap:12px;" id="chart-grid">
+    <div class="card" style="padding:8px;">
+      <div id="tv-chart" style="width:100%;height:560px;"></div>
+    </div>
+    <div class="card" id="trade-detail" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:600;color:var(--accent);">Trade detail</div>
+        <button id="trade-detail-close" style="background:transparent;color:var(--text-dim);border:0;cursor:pointer;font-size:18px;">×</button>
+      </div>
+      <div id="trade-detail-body"></div>
+    </div>
   </div>
 </section>
 
@@ -923,86 +963,237 @@ function lastTradeDays() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// CHART (TradingView Lightweight Charts)
+// CHART (TradingView Lightweight Charts) — multi-TF, click-to-inspect
 // ═══════════════════════════════════════════════════════════════════
-let tvChart = null, tvCandles = null, tvCandleData = null, chartLoaded = false;
+let tvChart = null, tvCandles = null;
+let currentTF = "1d";
+let candleCache = {};            // tf -> array of bars
+let priceLines = [];             // entry/sl/tp lines drawn for the inspected trade
+let markersByTime = {};          // time -> array of trades (for click lookup)
 
-async function loadChartData() {
-  if (tvCandleData) return tvCandleData;
+async function loadCandles(tf) {
+  if (candleCache[tf]) return candleCache[tf];
   try {
-    const res = await fetch("chart_data.json?t=" + Date.now());
+    const res = await fetch(`chart_data_${tf}.json?t=${Date.now()}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
-    tvCandleData = await res.json();
-    return tvCandleData;
+    const data = await res.json();
+    candleCache[tf] = data;
+    return data;
   } catch (e) {
+    // Fallback to legacy single-file daily data
+    if (tf === "1d") {
+      try {
+        const res = await fetch(`chart_data.json?t=${Date.now()}`);
+        if (res.ok) { candleCache[tf] = await res.json(); return candleCache[tf]; }
+      } catch {}
+    }
     document.getElementById("tv-chart").innerHTML =
-      `<div class="empty" style="margin:20px;">Could not load <code>chart_data.json</code>. Run <code>python weekly_health_check.py</code> once to generate it. <span class="dim">(${e.message})</span></div>`;
+      `<div class="empty" style="margin:20px;">Could not load <code>chart_data_${tf}.json</code>. Run <code>python weekly_health_check.py</code> once to (re)generate. <span class="dim">(${e.message})</span></div>`;
     return null;
   }
 }
 
 async function renderChart() {
-  if (chartLoaded) { redrawMarkers(); return; }
-  const candles = await loadChartData();
+  const candles = await loadCandles(currentTF);
   if (!candles) return;
 
-  const container = document.getElementById("tv-chart");
-  container.innerHTML = "";
-  tvChart = LightweightCharts.createChart(container, {
-    layout: { background: { color: "#0b0f17" }, textColor: "#9ca3af", fontSize: 11 },
-    grid:   { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
-    rightPriceScale: { borderColor: "#1f2937" },
-    timeScale: { borderColor: "#1f2937", timeVisible: false, secondsVisible: false },
-    crosshair: { mode: 1 },
-    autoSize: true,
-  });
-  tvCandles = tvChart.addCandlestickSeries({
-    upColor: "#22c55e", downColor: "#ef4444",
-    borderUpColor: "#22c55e", borderDownColor: "#ef4444",
-    wickUpColor: "#22c55e", wickDownColor: "#ef4444",
-  });
-  tvCandles.setData(candles);
-  chartLoaded = true;
-  redrawMarkers();
+  if (!tvChart) {
+    const container = document.getElementById("tv-chart");
+    container.innerHTML = "";
+    tvChart = LightweightCharts.createChart(container, {
+      layout: { background: { color: "#0b0f17" }, textColor: "#9ca3af", fontSize: 11 },
+      grid:   { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      rightPriceScale: { borderColor: "#1f2937" },
+      timeScale: { borderColor: "#1f2937", timeVisible: currentTF !== "1w" && currentTF !== "1d", secondsVisible: false },
+      crosshair: { mode: 1 },
+      autoSize: true,
+    });
+    tvCandles = tvChart.addCandlestickSeries({
+      upColor: "#22c55e", downColor: "#ef4444",
+      borderUpColor: "#22c55e", borderDownColor: "#ef4444",
+      wickUpColor: "#22c55e", wickDownColor: "#ef4444",
+    });
+    // Click handler — find nearest marker
+    tvChart.subscribeClick(param => {
+      if (!param.time) return;
+      const trades = markersByTime[param.time];
+      if (trades && trades.length) showTradeDetail(trades);
+    });
+    new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(document.getElementById("tv-chart"));
+  } else {
+    tvChart.applyOptions({
+      timeScale: { timeVisible: currentTF !== "1w" && currentTF !== "1d", secondsVisible: false }
+    });
+  }
 
-  new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(container);
+  tvCandles.setData(candles);
+  redrawMarkers();
+  applyRangePreset(document.querySelector("#range-toggle button.active")?.dataset.range || "all");
+}
+
+function trimToBucket(date) {
+  // Returns the time key matching candle granularity for that TF
+  if (currentTF === "1w") {
+    // Week starts Monday (Binance convention); but we use the ISO date of the bar's open.
+    // Simpler: find the candle whose time <= date and assume same bucket.
+    const ts = Math.floor(date.getTime() / 1000);
+    const candles = candleCache[currentTF] || [];
+    let last = candles[0]?.time;
+    for (const c of candles) {
+      const cTime = typeof c.time === "string" ? Math.floor(new Date(c.time).getTime()/1000) : c.time;
+      if (cTime > ts) break;
+      last = c.time;
+    }
+    return last;
+  }
+  if (currentTF === "1d") {
+    return date.toISOString().split("T")[0];
+  }
+  // 4h or 1h: snap down to bucket
+  const stepSec = currentTF === "4h" ? 4*3600 : 3600;
+  return Math.floor(date.getTime() / 1000 / stepSec) * stepSec;
 }
 
 function redrawMarkers() {
   if (!tvCandles) return;
+  clearOverlay();
   const src = document.getElementById("chart-source").value;
+  const showWins = document.getElementById("show-wins").checked;
+  const showLosses = document.getElementById("show-losses").checked;
+
   let trades = LEDGER.filter(r => r.date && r.pnl_pct != null);
   if (src) trades = trades.filter(r => r.source === src);
+  trades = trades.filter(t => (t.is_win && showWins) || (t.is_loss && showLosses));
 
-  // Group same-day trades to dedupe overlapping arrows
-  const byDay = {};
+  markersByTime = {};
   trades.forEach(t => {
-    const day = ymd(t.date);
-    if (!byDay[day]) byDay[day] = [];
-    byDay[day].push(t);
+    const key = trimToBucket(t.date);
+    if (!key) return;
+    if (!markersByTime[key]) markersByTime[key] = [];
+    markersByTime[key].push(t);
   });
 
-  const markers = Object.entries(byDay).map(([day, ts]) => {
+  const markers = Object.entries(markersByTime).map(([time, ts]) => {
     const isLong = ts.some(t => t.direction === "long");
     const won = ts.every(t => t.is_win);
     const lost = ts.every(t => t.is_loss);
     const color = won ? "#22c55e" : lost ? "#ef4444" : "#eab308";
-    const strats = [...new Set(ts.map(t => (t.strat||t.setup_type||"").replace(/_/g," ")))].join(", ");
     const totalPnl = ts.reduce((s,t) => s + (t.pnl_pct||0), 0);
     return {
-      time: day,
+      time,
       position: isLong ? "belowBar" : "aboveBar",
       color,
       shape: isLong ? "arrowUp" : "arrowDown",
       text: `${ts.length>1 ? ts.length+"× " : ""}${(totalPnl*100).toFixed(1)}%`,
     };
-  }).sort((a,b) => a.time.localeCompare(b.time));
+  }).sort((a,b) => (typeof a.time === "string" ? a.time.localeCompare(b.time) : a.time - b.time));
 
   tvCandles.setMarkers(markers);
 }
 
+function clearOverlay() {
+  priceLines.forEach(l => tvCandles.removePriceLine(l));
+  priceLines = [];
+  document.getElementById("trade-detail").style.display = "none";
+  document.getElementById("chart-grid").classList.remove("with-detail");
+}
+
+function showTradeDetail(trades) {
+  // Use the first trade with full price data
+  const t = trades.find(x => x.entry_price && x.sl_price && x.tp_price) || trades[0];
+  clearOverlay();
+
+  // Draw entry / SL / TP horizontal lines
+  if (t.entry_price) priceLines.push(tvCandles.createPriceLine({
+    price: t.entry_price, color: "#3b82f6", lineWidth: 1, lineStyle: 2,
+    axisLabelVisible: true, title: "ENTRY",
+  }));
+  if (t.sl_price) priceLines.push(tvCandles.createPriceLine({
+    price: t.sl_price, color: "#ef4444", lineWidth: 1, lineStyle: 2,
+    axisLabelVisible: true, title: "SL",
+  }));
+  if (t.tp_price) priceLines.push(tvCandles.createPriceLine({
+    price: t.tp_price, color: "#22c55e", lineWidth: 1, lineStyle: 2,
+    axisLabelVisible: true, title: "TP",
+  }));
+
+  // Auto-zoom to ±20 bars around entry
+  const entryTime = trimToBucket(t.date);
+  const candles = candleCache[currentTF] || [];
+  const idx = candles.findIndex(c => c.time === entryTime || (typeof c.time === "string" && c.time === entryTime));
+  if (idx >= 0) {
+    const from = candles[Math.max(0, idx - 20)].time;
+    const to = candles[Math.min(candles.length - 1, idx + 30)].time;
+    tvChart.timeScale().setVisibleRange({ from, to });
+  }
+
+  // Side panel
+  const detail = document.getElementById("trade-detail-body");
+  const info = STRAT_INFO[t.strat || t.setup_type] || { blurb: "—" };
+  const pnlCls = (t.pnl_pct||0) > 0 ? "green" : "red";
+  const outcomePill =
+    t.exit_reason === "tp_hit"   ? `<span class="pill green">Take profit</span>` :
+    t.exit_reason === "sl_hit"   ? `<span class="pill red">Stop loss</span>` :
+    t.exit_reason === "time_exit"? `<span class="pill yellow">Time exit</span>` :
+    `<span class="pill blue">${t.exit_reason||"—"}</span>`;
+  detail.innerHTML = `
+    <div style="font-size:13px;font-weight:600;margin-bottom:4px;">${(t.strat||t.setup_type||"—").replace(/_/g," ")}</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">${info.blurb}</div>
+    <div class="row"><span class="k">Date</span><span class="v">${fmtDate(t.date)}</span></div>
+    <div class="row"><span class="k">Side</span><span class="v ${t.direction==="long"?"green":"red"}">${(t.direction||"").toUpperCase()}</span></div>
+    <div class="row"><span class="k">Tier</span><span class="v">${t.tier || "—"}</span></div>
+    <div class="row"><span class="k">Entry</span><span class="v">${t.entry_price ? fmtUsd(t.entry_price) : "—"}</span></div>
+    <div class="row"><span class="k">Stop loss</span><span class="v red">${t.sl_price ? fmtUsd(t.sl_price) : "—"}</span></div>
+    <div class="row"><span class="k">Take profit</span><span class="v green">${t.tp_price ? fmtUsd(t.tp_price) : "—"}</span></div>
+    <div class="row"><span class="k">Exit</span><span class="v">${t.exit_price ? fmtUsd(t.exit_price) : "—"}</span></div>
+    <div class="row"><span class="k">Bars held</span><span class="v">${t.bars_held ?? "—"}</span></div>
+    <div class="row"><span class="k">R multiple</span><span class="v ${pnlCls}">${t.r_multiple != null ? fmtNum(t.r_multiple,2)+"R" : "—"}</span></div>
+    <div class="row"><span class="k">P&amp;L</span><span class="v ${pnlCls}">${fmtPct(t.pnl_pct)}</span></div>
+    <div class="row"><span class="k">Outcome</span><span class="v">${outcomePill}</span></div>
+    ${trades.length > 1 ? `<div style="margin-top:10px;font-size:11px;color:var(--text-mute);">+ ${trades.length - 1} more trade${trades.length>2?"s":""} on this bar</div>` : ""}
+  `;
+  document.getElementById("trade-detail").style.display = "block";
+  document.getElementById("chart-grid").classList.add("with-detail");
+}
+
+function applyRangePreset(range) {
+  if (!tvChart || !candleCache[currentTF]) return;
+  if (range === "all") { tvChart.timeScale().fitContent(); return; }
+  const candles = candleCache[currentTF];
+  const last = candles[candles.length - 1].time;
+  const lastDate = typeof last === "string" ? new Date(last) : new Date(last * 1000);
+  const map = { "1M": 30, "3M": 90, "1Y": 365, "3Y": 365*3 };
+  const back = new Date(lastDate); back.setDate(back.getDate() - map[range]);
+  // Find first candle >= back
+  const fromCandle = candles.find(c => {
+    const ct = typeof c.time === "string" ? new Date(c.time) : new Date(c.time * 1000);
+    return ct >= back;
+  });
+  if (fromCandle) tvChart.timeScale().setVisibleRange({ from: fromCandle.time, to: last });
+}
+
+// Wire controls
 document.getElementById("chart-source").addEventListener("change", redrawMarkers);
-document.getElementById("chart-fit").addEventListener("click", () => tvChart && tvChart.timeScale().fitContent());
+document.getElementById("show-wins").addEventListener("change", redrawMarkers);
+document.getElementById("show-losses").addEventListener("change", redrawMarkers);
+document.getElementById("chart-clear").addEventListener("click", clearOverlay);
+document.getElementById("trade-detail-close").addEventListener("click", clearOverlay);
+
+document.querySelectorAll("#tf-toggle button").forEach(b => {
+  b.addEventListener("click", async () => {
+    document.querySelectorAll("#tf-toggle button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    currentTF = b.dataset.tf;
+    await renderChart();
+  });
+});
+document.querySelectorAll("#range-toggle button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("#range-toggle button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    applyRangePreset(b.dataset.range);
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // TAB / EVENT WIRING
