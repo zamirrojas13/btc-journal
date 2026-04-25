@@ -1028,7 +1028,7 @@ async function renderChart() {
     // Click handler — find nearest marker
     tvChart.subscribeClick(param => {
       if (!param.time) return;
-      const trades = markersByTime[param.time];
+      const trades = markersByTime[String(param.time)] || markersByTime[param.time];
       if (trades && trades.length) showTradeDetail(trades);
     });
     new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(document.getElementById("tv-chart"));
@@ -1083,20 +1083,20 @@ function redrawMarkers() {
     markersByTime[key].push(t);
   });
 
-  const markers = Object.entries(markersByTime).map(([time, ts]) => {
+  const markers = Object.entries(markersByTime).map(([timeStr, ts]) => {
     const isLong = ts.some(t => t.direction === "long");
     const won = ts.every(t => t.is_win);
     const lost = ts.every(t => t.is_loss);
     const color = won ? "#22c55e" : lost ? "#ef4444" : "#eab308";
     const totalPnl = ts.reduce((s,t) => s + (t.pnl_pct||0), 0);
     return {
-      time,
+      time: Number(timeStr),  // CRITICAL: object keys are strings; Lightweight Charts requires numeric unix seconds
       position: isLong ? "belowBar" : "aboveBar",
       color,
       shape: isLong ? "arrowUp" : "arrowDown",
       text: `${ts.length>1 ? ts.length+"× " : ""}${(totalPnl*100).toFixed(1)}%`,
     };
-  }).sort((a,b) => (typeof a.time === "string" ? a.time.localeCompare(b.time) : a.time - b.time));
+  }).sort((a,b) => a.time - b.time);
 
   baseMarkers = markers;
   tvCandles.setMarkers(markers);
