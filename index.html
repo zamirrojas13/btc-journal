@@ -365,6 +365,13 @@ const STRAT_INFO = {
   "T3b_H4_sweep_hi_short_loose": { tier: 3, tf: "4-hour",  side: "short", blurb: "4-hour swept its 20-bar high in a downtrend with hot RSI. Counter-trend rejection." },
   "C3_W_engulf_long":            { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly bullish engulfing after an oversold reading. Strong reversal signal." },
   "C5_W_hammer_20w_low_long":    { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly hammer right at the 20-week low with a low RSI. Capitulation buy." },
+  // Strats from older raw backtests (not part of Scheme I production set):
+  "T2c_D_fail_brk_short":        { tier: 2, tf: "daily",   side: "short", blurb: "Daily failed breakout above the 20-day high. Buyers couldn't hold; expect retrace." },
+  "T3c_D_bull_engulf_long":      { tier: 3, tf: "daily",   side: "long",  blurb: "Daily bullish engulfing while weekly is uptrending. Trend-aligned dip buy." },
+  "T4a_H4_hammer_long":          { tier: 4, tf: "4-hour",  side: "long",  blurb: "4-hour hammer at a 20-bar low in an uptrend. Speculative dip buy — small size." },
+  "T4b_H4_sstar_short":          { tier: 4, tf: "4-hour",  side: "short", blurb: "4-hour shooting star at a 20-bar high in a downtrend. Fade the spike." },
+  "T4c_H1_sweep_lo_long":        { tier: 4, tf: "1-hour",  side: "long",  blurb: "1-hour swept its 20-bar low and snapped back. Quick counter-trend bounce — speculative." },
+  "T4d_H1_fail_brk_short":       { tier: 4, tf: "1-hour",  side: "short", blurb: "1-hour failed breakout above 20-bar high while below EMA200. Quick fade." },
 };
 
 const TIER_LABEL = { 1: "Elite", 2: "Solid", 3: "Standard", 4: "Speculative" };
@@ -578,8 +585,26 @@ function renderLog() {
   const sourceSel = document.getElementById("filter-source");
   const stratSel = document.getElementById("filter-strat");
   if (sourceSel.options.length <= 1) {
-    sources.forEach(s => sourceSel.add(new Option(s, s)));
-    strats.forEach(s => stratSel.add(new Option(s, s)));
+    // Friendly labels per source
+    const SOURCE_LABEL = {
+      "backtest_scheme_i_plus_c3c5":    "Canonical backtest (241 trades, full data)",
+      "backtest_tiered_final":          "Older Scheme backtest (no prices)",
+      "backtest_tiered_raw_all_tf":     "Raw exploratory (all 14 strats, no prices)",
+      "live_signal_log":                "Live signal log (Binance)",
+      "live_alpaca_paper":              "Live Alpaca paper",
+      "live_alpaca_real":               "Live Alpaca real",
+      "manual":                         "Manual",
+    };
+    // Canonical first, then the rest
+    const ordered = ["backtest_scheme_i_plus_c3c5", ...sources.filter(s => s !== "backtest_scheme_i_plus_c3c5")];
+    ordered.forEach(s => {
+      if (sources.includes(s)) sourceSel.add(new Option(SOURCE_LABEL[s] || s, s));
+    });
+    strats.forEach(s => stratSel.add(new Option(s.replace(/_/g," "), s)));
+    // Default to canonical so user sees the rich data first
+    if (sources.includes("backtest_scheme_i_plus_c3c5")) {
+      sourceSel.value = "backtest_scheme_i_plus_c3c5";
+    }
   }
   drawLogRows();
 }
