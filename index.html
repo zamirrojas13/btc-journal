@@ -984,6 +984,7 @@ let overlaySeries = [];          // line series for the trade-box overlay
 let markersByTime = {};          // time -> array of trades (for click lookup)
 let baseMarkers = [];            // markers from redrawMarkers (so we can re-apply with overlays)
 let pinned = false;              // when true, hover doesn't clear the inspected trade
+let lastHoverKey = null;         // key of marker currently shown via hover (prevents thrash)
 
 async function loadCandles(tf) {
   if (candleCache[tf]) return candleCache[tf];
@@ -1034,23 +1035,25 @@ async function renderChart() {
       if (trades && trades.length) { pinned = true; showTradeDetail(trades); }
       else { pinned = false; clearOverlay(); }
     });
-    // Hover preview — show rectangle on the trade under the cursor, dim others
+    // Hover preview — only redraw when the nearest marker CHANGES (else thrashes badly)
     tvChart.subscribeCrosshairMove(param => {
       if (pinned) return;
-      if (!param.time) { clearOverlay(); return; }
-      // Find the closest marker by absolute time delta within ~3 buckets
+      if (!param.time) {
+        if (lastHoverKey !== null) { lastHoverKey = null; clearOverlay(); }
+        return;
+      }
       const tNum = Number(param.time);
+      const stepSec = currentTF === "1w" ? 7*86400 : currentTF === "1d" ? 86400 : currentTF === "4h" ? 4*3600 : 3600;
       let best = null, bestDelta = Infinity;
       for (const k of Object.keys(markersByTime)) {
         const d = Math.abs(Number(k) - tNum);
         if (d < bestDelta) { bestDelta = d; best = k; }
       }
-      const stepSec = currentTF === "1w" ? 7*86400 : currentTF === "1d" ? 86400 : currentTF === "4h" ? 4*3600 : 3600;
-      if (best && bestDelta <= stepSec * 1.5) {
-        showTradeDetail(markersByTime[best], /*hover*/true);
-      } else {
-        clearOverlay();
-      }
+      const newKey = (best && bestDelta <= stepSec * 0.6) ? best : null;
+      if (newKey === lastHoverKey) return;  // no change → skip redraw
+      lastHoverKey = newKey;
+      if (newKey) showTradeDetail(markersByTime[newKey], /*hover*/true);
+      else clearOverlay();
     });
     new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(document.getElementById("tv-chart"));
   } else {
@@ -1140,12 +1143,12 @@ function redrawMarkers() {
 }
 
 function clearOverlay() {
-  priceLines.forEach(l => tvCandles.removePriceLine(l));
+  if (priceLines.length) priceLines.forEach(l => tvCandles.removePriceLine(l));
   priceLines = [];
-  overlaySeries.forEach(s => tvChart.removeSeries(s));
+  if (overlaySeries.length) overlaySeries.forEach(s => tvChart.removeSeries(s));
   overlaySeries = [];
-  // Restore base markers
   if (tvCandles) tvCandles.setMarkers(baseMarkers);
+  lastHoverKey = null;
   document.getElementById("trade-detail").style.display = "none";
   document.getElementById("chart-grid").classList.remove("with-detail");
 }
