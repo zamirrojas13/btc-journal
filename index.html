@@ -309,8 +309,8 @@
         <option value="">All sources</option>
       </select>
       <select id="filter-trade-tf" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;" title="Show only trades from this signal timeframe">
-        <option value="match">Trades on this TF</option>
-        <option value="all">All trade timeframes</option>
+        <option value="all" selected>All trade timeframes</option>
+        <option value="match">Match chart TF only</option>
         <option value="1w">Weekly trades</option>
         <option value="1d">Daily trades</option>
         <option value="4h">4H trades</option>
@@ -977,7 +977,9 @@ let tvChart = null, tvCandles = null;
 let currentTF = "1d";
 let candleCache = {};            // tf -> array of bars
 let priceLines = [];             // entry/sl/tp lines drawn for the inspected trade
+let overlaySeries = [];          // line series for the trade-box overlay
 let markersByTime = {};          // time -> array of trades (for click lookup)
+let baseMarkers = [];            // markers from redrawMarkers (so we can re-apply with overlays)
 
 async function loadCandles(tf) {
   if (candleCache[tf]) return candleCache[tf];
@@ -1094,12 +1096,17 @@ function redrawMarkers() {
     };
   }).sort((a,b) => (typeof a.time === "string" ? a.time.localeCompare(b.time) : a.time - b.time));
 
+  baseMarkers = markers;
   tvCandles.setMarkers(markers);
 }
 
 function clearOverlay() {
   priceLines.forEach(l => tvCandles.removePriceLine(l));
   priceLines = [];
+  overlaySeries.forEach(s => tvChart.removeSeries(s));
+  overlaySeries = [];
+  // Restore base markers
+  if (tvCandles) tvCandles.setMarkers(baseMarkers);
   document.getElementById("trade-detail").style.display = "none";
   document.getElementById("chart-grid").classList.remove("with-detail");
 }
@@ -1109,7 +1116,17 @@ function showTradeDetail(trades) {
   const t = trades.find(x => x.entry_price && x.sl_price && x.tp_price) || trades[0];
   clearOverlay();
 
-  // Draw entry / SL / TP horizontal lines
+  const entryTime = trimToBucket(t.date);
+  const candles = candleCache[currentTF] || [];
+  const entryIdx = candles.findIndex(c => c.time === entryTime);
+
+  // Compute exit time from entry + bars_held; fall back to entry+1 bar if missing
+  let exitIdx = entryIdx >= 0 && t.bars_held != null
+    ? Math.min(entryIdx + Number(t.bars_held), candles.length - 1)
+    : (entryIdx >= 0 ? Math.min(entryIdx + 1, candles.length - 1) : -1);
+  const exitTime = exitIdx >= 0 ? candles[exitIdx].time : entryTime;
+
+  // Always draw axis price lines (full chart width) for entry/SL/TP labels
   if (t.entry_price) priceLines.push(tvCandles.createPriceLine({
     price: t.entry_price, color: "#3b82f6", lineWidth: 1, lineStyle: 2,
     axisLabelVisible: true, title: "ENTRY",
@@ -1123,14 +1140,47 @@ function showTradeDetail(trades) {
     axisLabelVisible: true, title: "TP",
   }));
 
-  // Auto-zoom to ±20 bars around entry
-  const entryTime = trimToBucket(t.date);
-  const candles = candleCache[currentTF] || [];
-  const idx = candles.findIndex(c => c.time === entryTime || (typeof c.time === "string" && c.time === entryTime));
-  if (idx >= 0) {
-    const from = candles[Math.max(0, idx - 20)].time;
-    const to = candles[Math.min(candles.length - 1, idx + 30)].time;
-    tvChart.timeScale().setVisibleRange({ from, to });
+  // Draw bounded TP/SL/entry segments only across the trade duration
+  if (entryIdx >= 0 && exitIdx > entryIdx) {
+    const seg = (price, color, dashed=false) => {
+      const data = [];
+      for (let i = entryIdx; i <= exitIdx; i++) data.push({ time: candles[i].time, value: price });
+      const s = tvChart.addLineSeries({
+        color, lineWidth: 2,
+        lineStyle: dashed ? 2 : 0,
+        priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      });
+      s.setData(data);
+      overlaySeries.push(s);
+    };
+    if (t.tp_price)    seg(t.tp_price,    "rgba(34,197,94,0.85)");
+    if (t.sl_price)    seg(t.sl_price,    "rgba(239,68,68,0.85)");
+    if (t.entry_price) seg(t.entry_price, "rgba(59,130,246,0.7)", true);
+
+    // Exit marker
+    const exitShape = t.exit_reason === "tp_hit" ? "circle" :
+                      t.exit_reason === "sl_hit" ? "circle" : "square";
+    const exitColor = t.is_win ? "#22c55e" : t.is_loss ? "#ef4444" : "#eab308";
+    tvCandles.setMarkers([
+      ...baseMarkers,
+      {
+        time: exitTime,
+        position: "inBar",
+        color: exitColor,
+        shape: exitShape,
+        text: t.exit_reason ? t.exit_reason.replace("_", " ") : "exit",
+      },
+    ]);
+  }
+
+  // Auto-zoom: ±10 bars around entry, plus enough room for the full trade
+  if (entryIdx >= 0) {
+    const fromIdx = Math.max(0, entryIdx - 10);
+    const toIdx = Math.min(candles.length - 1, Math.max(exitIdx, entryIdx) + 10);
+    tvChart.timeScale().setVisibleRange({
+      from: candles[fromIdx].time,
+      to: candles[toIdx].time,
+    });
   }
 
   // Side panel
