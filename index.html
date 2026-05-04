@@ -1,1355 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BTC Strategy Journal</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-  :root {
-    --bg:        #0b0f17;
-    --bg-soft:   #131826;
-    --bg-hover:  #1a2030;
-    --border:    #1f2937;
-    --text:      #e5e7eb;
-    --text-dim:  #9ca3af;
-    --text-mute: #6b7280;
-    --green:     #22c55e;
-    --red:       #ef4444;
-    --yellow:    #eab308;
-    --blue:      #3b82f6;
-    --accent:    #f59e0b;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Display", system-ui, sans-serif;
-    background: var(--bg); color: var(--text); line-height: 1.5;
-    -webkit-font-smoothing: antialiased; min-height: 100vh;
-  }
-  .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    flex-wrap: wrap; gap: 12px; padding: 16px 0 8px;
-    border-bottom: 1px solid var(--border); margin-bottom: 16px;
-  }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-dot { width: 10px; height: 10px; background: var(--green); border-radius: 50%;
-               box-shadow: 0 0 12px var(--green); }
-  .brand-title { font-size: 18px; font-weight: 600; letter-spacing: 0.3px; }
-  .brand-sub { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
-  .last-updated { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-  .last-updated b { color: var(--text); }
-  nav.tabs {
-    display: flex; gap: 4px; overflow-x: auto; padding-bottom: 8px;
-    border-bottom: 1px solid var(--border); margin-bottom: 16px;
-    scrollbar-width: thin;
-  }
-  nav.tabs button {
-    background: transparent; color: var(--text-dim); border: 0;
-    padding: 10px 16px; font-size: 14px; cursor: pointer; font-family: inherit;
-    border-radius: 8px 8px 0 0; white-space: nowrap; transition: all 0.15s;
-    border-bottom: 2px solid transparent;
-  }
-  nav.tabs button:hover { color: var(--text); background: var(--bg-soft); }
-  nav.tabs button.active {
-    color: var(--text); border-bottom-color: var(--accent); background: var(--bg-soft);
-  }
-  .panel { display: none; }
-  .panel.active { display: block; }
-
-  .grid { display: grid; gap: 12px; }
-  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-  .card {
-    background: var(--bg-soft); border: 1px solid var(--border);
-    border-radius: 12px; padding: 16px;
-  }
-  .card-title {
-    font-size: 11px; color: var(--text-mute); text-transform: uppercase;
-    letter-spacing: 1px; margin-bottom: 6px;
-  }
-  .card-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .card-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
-  .card-explain { font-size: 12px; color: var(--text-dim); margin-top: 8px; line-height: 1.4; }
-  .green { color: var(--green); }
-  .red { color: var(--red); }
-  .yellow { color: var(--yellow); }
-  .blue { color: var(--blue); }
-  .dim { color: var(--text-dim); }
-
-  .pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 999px; font-size: 11px;
-    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
-  }
-  .pill.green { background: rgba(34,197,94,.12); color: var(--green); }
-  .pill.red { background: rgba(239,68,68,.12); color: var(--red); }
-  .pill.yellow { background: rgba(234,179,8,.12); color: var(--yellow); }
-  .pill.blue { background: rgba(59,130,246,.12); color: var(--blue); }
-  .pill::before {
-    content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor;
-  }
-
-  /* Summary */
-  .period-toggle { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-  .period-toggle button {
-    background: var(--bg-soft); color: var(--text-dim); border: 1px solid var(--border);
-    padding: 6px 14px; font-size: 13px; cursor: pointer; border-radius: 6px;
-    font-family: inherit;
-  }
-  .period-toggle button.active {
-    background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600;
-  }
-  .narrative {
-    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px; line-height: 1.7; font-size: 14px;
-  }
-  .narrative p { margin-bottom: 12px; }
-  .narrative h3 {
-    font-size: 16px; margin: 16px 0 8px; color: var(--accent); font-weight: 600;
-  }
-  .narrative .quote {
-    border-left: 3px solid var(--accent); padding-left: 12px; color: var(--text-dim);
-    font-style: italic; margin: 12px 0;
-  }
-  .trade-mini {
-    display: grid; grid-template-columns: auto 1fr auto; gap: 12px;
-    align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  .trade-mini:last-child { border-bottom: 0; }
-  .trade-mini .date { color: var(--text-mute); font-variant-numeric: tabular-nums; min-width: 80px; }
-  .trade-mini .reason { color: var(--text-dim); font-size: 12px; }
-  .trade-mini .pnl { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; }
-
-  /* Trade log table */
-  .table-wrap { overflow-x: auto; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; }
-  table.log { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 800px; }
-  table.log th {
-    text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase;
-    letter-spacing: 0.8px; color: var(--text-mute); border-bottom: 1px solid var(--border);
-    background: var(--bg); position: sticky; top: 0; cursor: pointer;
-    user-select: none;
-  }
-  table.log th:hover { color: var(--text); }
-  table.log th.sorted-asc::after { content: " ▲"; color: var(--accent); }
-  table.log th.sorted-desc::after { content: " ▼"; color: var(--accent); }
-  table.log td { padding: 10px 12px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
-  table.log tr:hover td { background: var(--bg-hover); }
-  table.log tr:last-child td { border-bottom: 0; }
-  .filter-bar {
-    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;
-  }
-  .filter-bar select, .filter-bar input {
-    background: var(--bg-soft); color: var(--text); border: 1px solid var(--border);
-    padding: 6px 10px; font-size: 13px; border-radius: 6px; font-family: inherit;
-  }
-  .reason-cell { color: var(--text-dim); font-size: 12px; max-width: 320px; }
-
-  /* Charts */
-  .chart-card { padding: 20px; }
-  .chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .chart-card .chart-explain {
-    font-size: 12px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5;
-  }
-  .chart-wrap { position: relative; height: 240px; }
-
-  /* Health Check */
-  .scorecard {
-    display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  }
-  .health-card {
-    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
-    padding: 16px; display: flex; flex-direction: column; gap: 8px;
-  }
-  .health-header { display: flex; justify-content: space-between; align-items: center; }
-  .health-name { font-size: 13px; font-weight: 600; }
-  .health-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .health-bar {
-    height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; position: relative;
-  }
-  .health-bar-fill { height: 100%; transition: width 0.3s; border-radius: 3px; }
-  .health-explain { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
-  .health-target { font-size: 11px; color: var(--text-mute); }
-
-  .seg { display: inline-flex; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .seg button {
-    background: transparent; color: var(--text-dim); border: 0; padding: 6px 12px;
-    font-size: 12px; cursor: pointer; font-family: inherit; border-right: 1px solid var(--border);
-  }
-  .seg button:last-child { border-right: 0; }
-  .seg button.active { background: var(--accent); color: var(--bg); font-weight: 600; }
-  .seg button:hover:not(.active) { color: var(--text); background: var(--bg-hover); }
-
-  @media (min-width: 900px) {
-    #chart-grid.with-detail { grid-template-columns: 1fr 320px !important; }
-  }
-  #trade-detail .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-  #trade-detail .row:last-child { border-bottom: 0; }
-  #trade-detail .row .k { color: var(--text-mute); }
-  #trade-detail .row .v { font-variant-numeric: tabular-nums; }
-
-  .empty {
-    text-align: center; padding: 40px; color: var(--text-mute);
-    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px;
-  }
-
-  @media (max-width: 600px) {
-    .container { padding: 12px; }
-    .brand-title { font-size: 16px; }
-    nav.tabs button { padding: 8px 12px; font-size: 13px; }
-    .card-value { font-size: 20px; }
-    .health-value { font-size: 22px; }
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AlphaBot — BTC Trading Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0a0a0c; color: #ece9e2; font-family: 'Space Grotesk', sans-serif; overflow: hidden; }
+    #root { display: flex; height: 100vh; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #1f1f28; border-radius: 4px; }
+    input[type=range] { -webkit-appearance: none; height: 4px; background: #1f1f28; border-radius: 2px; outline: none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #F7931A; cursor: pointer; }
+    button:hover { filter: brightness(1.15); }
+    select { color-scheme: dark; }
+  </style>
 </head>
 <body>
-<div class="container">
+<div id="root"></div>
 
-<header>
-  <div class="brand">
-    <div class="brand-dot"></div>
-    <div>
-      <div class="brand-title">BTC Strategy Journal</div>
-      <div class="brand-sub">Scheme I + C3 + C5 · Multi-timeframe</div>
-    </div>
-  </div>
-  <div class="last-updated">
-    <span id="live-price" class="dim">BTC <b style="color:var(--text);">…</b></span>
-    &nbsp;·&nbsp; data through <b id="last-updated">…</b>
-    &nbsp;·&nbsp; <span id="trade-count" class="dim">0 trades</span>
-    &nbsp;·&nbsp; <a href="#" id="refresh" style="color:var(--accent); text-decoration:none;">↻ refresh</a>
-  </div>
-</header>
+<script src="vendor/react.development.js"></script>
+<script src="vendor/react-dom.development.js"></script>
+<script src="vendor/babel.min.js"></script>
 
-<nav class="tabs">
-  <button data-tab="summary" class="active">📖 Summary</button>
-  <button data-tab="log">📋 Trade Log</button>
-  <button data-tab="chart">📈 Chart</button>
-  <button data-tab="dashboard">📊 Dashboard</button>
-  <button data-tab="health">💚 Health Check</button>
-</nav>
+<!-- Data -->
+<script type="text/babel" src="data.js?v=14"></script>
+<!-- Components -->
+<script type="text/babel" src="components/Sidebar.jsx?v=14"></script>
+<script type="text/babel" src="components/Overview.jsx?v=14"></script>
+<script type="text/babel" src="components/Chart.jsx?v=14"></script>
+<script type="text/babel" src="components/BotControl.jsx?v=14"></script>
+<script type="text/babel" src="components/Journal.jsx?v=14"></script>
+<script type="text/babel" src="components/Ledger.jsx?v=14"></script>
+<script type="text/babel" src="components/Analytics.jsx?v=14"></script>
+<script type="text/babel" src="components/RiskMonitor.jsx?v=14"></script>
+<script type="text/babel" src="components/SignalCheck.jsx?v=14"></script>
+<script type="text/babel" src="components/Strategy.jsx?v=14"></script>
+<script type="text/babel" src="components/Telegram.jsx?v=14"></script>
 
-<!-- ───── SUMMARY ───── -->
-<section class="panel active" id="panel-summary">
-  <div class="period-toggle" id="period-toggle">
-    <button data-period="week" class="active">This Week</button>
-    <button data-period="month">This Month</button>
-    <button data-period="year">This Year</button>
-    <button data-period="all">All Time</button>
-  </div>
-  <div id="summary-content"></div>
-</section>
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#F7931A",
+  "bgColor": "#0a0a0c",
+  "surfaceColor": "#111116",
+  "compactMode": false
+}/*EDITMODE-END*/;
 
-<!-- ───── TRADE LOG ───── -->
-<section class="panel" id="panel-log">
-  <div class="filter-bar">
-    <select id="filter-source">
-      <option value="">All sources</option>
-    </select>
-    <select id="filter-strat">
-      <option value="">All strategies</option>
-    </select>
-    <select id="filter-result">
-      <option value="">All results</option>
-      <option value="win">Wins only</option>
-      <option value="loss">Losses only</option>
-    </select>
-    <input type="search" id="filter-text" placeholder="Search…" />
-  </div>
-  <div class="table-wrap">
-    <table class="log" id="log-table">
-      <thead>
-        <tr>
-          <th data-sort="timestamp_entry">Date</th>
-          <th data-sort="strat">Strategy</th>
-          <th data-sort="direction">Side</th>
-          <th data-sort="entry_price">Entry</th>
-          <th data-sort="exit_price">Exit</th>
-          <th data-sort="r_multiple">R</th>
-          <th data-sort="pnl_pct">P&amp;L</th>
-          <th data-sort="exit_reason">Outcome</th>
-          <th>Why this trade</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
-</section>
+function App() {
+  const [page, setPage]     = React.useState('overview');
+  const [botStatus, setBotStatus] = React.useState('running');
+  const [tweaks, setTweaks] = React.useState(TWEAK_DEFAULTS);
+  const [tweaksOpen, setTweaksOpen] = React.useState(false);
+  const [data, setData]     = React.useState(MOCK);
 
-<!-- ───── CHART ───── -->
-<section class="panel" id="panel-chart">
-  <div class="card" style="margin-bottom: 12px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-      <div>
-        <div style="font-size:14px;font-weight:600;">BTC/USD — trades plotted</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">
-          ▲ green = winning long · ▲ red = losing long · ▼ green = winning short · ▼ red = losing short ·
-          <b style="color:var(--accent);">click any arrow</b> to inspect the trade
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">
-      <div class="seg" id="tf-toggle">
-        <button data-tf="1w">1W</button>
-        <button data-tf="1d" class="active">1D</button>
-        <button data-tf="4h">4H</button>
-        <button data-tf="1h">1H</button>
-      </div>
-      <div class="seg" id="range-toggle">
-        <button data-range="1M">1M</button>
-        <button data-range="3M">3M</button>
-        <button data-range="1Y">1Y</button>
-        <button data-range="3Y" class="active">3Y</button>
-        <button data-range="all">All</button>
-      </div>
-      <select id="chart-source" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;">
-        <option value="backtest_scheme_i_plus_c3c5">Canonical backtest (241 trades)</option>
-        <option value="">All sources</option>
-      </select>
-      <select id="filter-trade-tf" style="background:var(--bg-soft);color:var(--text);border:1px solid var(--border);padding:6px 10px;font-size:12px;border-radius:6px;font-family:inherit;" title="Show only trades from this signal timeframe">
-        <option value="all" selected>All trade timeframes</option>
-        <option value="match">Match chart TF only</option>
-        <option value="1w">Weekly trades</option>
-        <option value="1d">Daily trades</option>
-        <option value="4h">4H trades</option>
-        <option value="1h">1H trades</option>
-      </select>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
-        <input type="checkbox" id="show-wins" checked> wins
-      </label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);cursor:pointer;">
-        <input type="checkbox" id="show-losses" checked> losses
-      </label>
-      <button id="chart-clear" style="background:var(--bg-soft);color:var(--text-dim);border:1px solid var(--border);padding:6px 12px;font-size:12px;border-radius:6px;cursor:pointer;font-family:inherit;">Clear overlay</button>
-      <span id="chart-trade-count" style="margin-left:auto;color:var(--text-dim);font-size:12px;align-self:center;"></span>
-    </div>
-    <div id="chart-empty" style="display:none;margin-top:12px;padding:14px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.3);border-radius:8px;color:var(--text);font-size:13px;line-height:1.5;"></div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr;gap:12px;" id="chart-grid">
-    <div class="card" style="padding:8px;">
-      <div id="tv-chart" style="width:100%;height:560px;"></div>
-    </div>
-    <div class="card" id="trade-detail" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:600;color:var(--accent);">Trade detail</div>
-        <button id="trade-detail-close" style="background:transparent;color:var(--text-dim);border:0;cursor:pointer;font-size:18px;">×</button>
-      </div>
-      <div id="trade-detail-body"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ───── DASHBOARD ───── -->
-<section class="panel" id="panel-dashboard">
-  <div class="grid grid-3" style="margin-bottom: 16px;">
-    <div class="card"><div class="card-title">Total Return</div><div class="card-value" id="dash-total">…</div><div class="card-sub" id="dash-total-sub">starting $10,000</div></div>
-    <div class="card"><div class="card-title">Win Rate</div><div class="card-value" id="dash-wr">…</div><div class="card-sub" id="dash-wr-sub"></div></div>
-    <div class="card"><div class="card-title">Profit Factor</div><div class="card-value" id="dash-pf">…</div><div class="card-sub">$ won per $ lost</div></div>
-    <div class="card"><div class="card-title">Avg R:R</div><div class="card-value" id="dash-rr">…</div><div class="card-sub">average per trade</div></div>
-    <div class="card"><div class="card-title">Max Drawdown</div><div class="card-value" id="dash-dd">…</div><div class="card-sub">worst peak-to-valley dip</div></div>
-    <div class="card"><div class="card-title">Trades</div><div class="card-value" id="dash-n">…</div><div class="card-sub" id="dash-n-sub"></div></div>
-  </div>
-  <div class="grid grid-2">
-    <div class="card chart-card">
-      <h3>Equity Curve</h3>
-      <div class="chart-explain">How much $10,000 would have grown trading this strategy. Going up = strategy is making money over time.</div>
-      <div class="chart-wrap"><canvas id="chart-equity"></canvas></div>
-    </div>
-    <div class="card chart-card">
-      <h3>Drawdown</h3>
-      <div class="chart-explain">How far below the highest point the account dropped. Closer to 0% is better; deep dips hurt psychology and capital.</div>
-      <div class="chart-wrap"><canvas id="chart-dd"></canvas></div>
-    </div>
-    <div class="card chart-card">
-      <h3>Wins vs Losses by Strategy</h3>
-      <div class="chart-explain">Each bar = one of the 10 setups. Green = winning trades, red = losing trades. Tells you which setups carry the strategy.</div>
-      <div class="chart-wrap"><canvas id="chart-strat"></canvas></div>
-    </div>
-    <div class="card chart-card">
-      <h3>Monthly Return</h3>
-      <div class="chart-explain">Each bar = one calendar month's performance. Green months above zero, red below. Helps spot streaks and dry spells.</div>
-      <div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
-    </div>
-  </div>
-</section>
-
-<!-- ───── HEALTH CHECK ───── -->
-<section class="panel" id="panel-health">
-  <div class="card" style="margin-bottom: 16px;">
-    <div class="card-title">Overall status</div>
-    <div class="card-value"><span id="health-overall">…</span></div>
-    <div class="card-explain" id="health-overall-text"></div>
-  </div>
-  <div class="scorecard" id="scorecard"></div>
-</section>
-
-</div>
-
-<script>
-// ═══════════════════════════════════════════════════════════════════
-// CONFIG
-// ═══════════════════════════════════════════════════════════════════
-const LEDGER_URL = "trades_ledger.csv";
-
-// Canonical baseline (from validated 2017-08 → 2026-04 backtest)
-const BASELINE = {
-  trades: 241,
-  total_pct: 2215.0,
-  cagr: 44.6,
-  wr: 47.3,
-  pf: 1.97,
-  dd: -32.6,
-};
-
-// Plain-English description per strategy.
-const STRAT_INFO = {
-  "T1a_W_fail_brkdn_long":       { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly chart broke below its 20-week low and snapped back. Panic seller exhaustion → bullish reversal." },
-  "T1b_W_rsi_os_long":           { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly RSI was deeply oversold (<35) and crossed back above 38 on a green candle. Momentum has flipped." },
-  "T1c_D_sstar_short":           { tier: 1, tf: "daily",   side: "short", blurb: "Daily shooting star at a 20-day high while the weekly is 20%+ above its EMA200. Classic euphoria peak." },
-  "T1d_H4_sweep_hi_short":       { tier: 1, tf: "4-hour",  side: "short", blurb: "4-hour swept above the 20-bar high and closed back inside, in a daily downtrend. Liquidity grab fade." },
-  "T2a_D_hammer_long":           { tier: 2, tf: "daily",   side: "long",  blurb: "Daily hammer at a 20-day low with weekly RSI bullish. Buyers are stepping in at support." },
-  "T2b_W_sweep_hi_short":        { tier: 2, tf: "weekly",  side: "short", blurb: "Weekly swept its 20-week high after a strong rally, closed red. Overextension fade." },
-  "T3a_H1_fail_brkdn_long":      { tier: 3, tf: "1-hour",  side: "long",  blurb: "1-hour broke its 20-bar low and snapped back above EMA50. Quick failed breakdown — fade the dip." },
-  "T3b_H4_sweep_hi_short_loose": { tier: 3, tf: "4-hour",  side: "short", blurb: "4-hour swept its 20-bar high in a downtrend with hot RSI. Counter-trend rejection." },
-  "C3_W_engulf_long":            { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly bullish engulfing after an oversold reading. Strong reversal signal." },
-  "C5_W_hammer_20w_low_long":    { tier: 1, tf: "weekly",  side: "long",  blurb: "Weekly hammer right at the 20-week low with a low RSI. Capitulation buy." },
-  // Strats from older raw backtests (not part of Scheme I production set):
-  "T2c_D_fail_brk_short":        { tier: 2, tf: "daily",   side: "short", blurb: "Daily failed breakout above the 20-day high. Buyers couldn't hold; expect retrace." },
-  "T3c_D_bull_engulf_long":      { tier: 3, tf: "daily",   side: "long",  blurb: "Daily bullish engulfing while weekly is uptrending. Trend-aligned dip buy." },
-  "T4a_H4_hammer_long":          { tier: 4, tf: "4-hour",  side: "long",  blurb: "4-hour hammer at a 20-bar low in an uptrend. Speculative dip buy — small size." },
-  "T4b_H4_sstar_short":          { tier: 4, tf: "4-hour",  side: "short", blurb: "4-hour shooting star at a 20-bar high in a downtrend. Fade the spike." },
-  "T4c_H1_sweep_lo_long":        { tier: 4, tf: "1-hour",  side: "long",  blurb: "1-hour swept its 20-bar low and snapped back. Quick counter-trend bounce — speculative." },
-  "T4d_H1_fail_brk_short":       { tier: 4, tf: "1-hour",  side: "short", blurb: "1-hour failed breakout above 20-bar high while below EMA200. Quick fade." },
-};
-
-const TIER_LABEL = { 1: "Elite", 2: "Solid", 3: "Standard", 4: "Speculative" };
-
-// ═══════════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════════
-let LEDGER = [];
-let charts = {};
-let logSort = { col: "timestamp_entry", dir: "desc" };
-
-// ═══════════════════════════════════════════════════════════════════
-// LOAD
-// ═══════════════════════════════════════════════════════════════════
-async function loadLedger() {
-  try {
-    const res = await fetch(LEDGER_URL + "?t=" + Date.now());
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const text = await res.text();
-    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, dynamicTyping: true });
-    LEDGER = parsed.data
-      .filter(r => r.trade_id)
-      .map(r => ({
-        ...r,
-        date: r.timestamp_entry ? new Date(r.timestamp_entry) : null,
-        is_win: r.pnl_pct != null && r.pnl_pct > 0,
-        is_loss: r.pnl_pct != null && r.pnl_pct < 0,
-      }))
-      .sort((a, b) => (a.date && b.date) ? a.date - b.date : 0);
-  } catch (e) {
-    document.getElementById("summary-content").innerHTML =
-      `<div class="empty">Could not load <code>trades_ledger.csv</code>.<br><br>If you opened this file directly with <code>file://</code>, browsers block reading sibling CSVs. Either:<br>(1) run a tiny local server: <code>python -m http.server</code> in this folder, then open http://localhost:8000<br>(2) push to GitHub Pages and open the URL.<br><br><span class="dim">${e.message}</span></div>`;
-    throw e;
-  }
-  render();
-}
-
-function render() {
-  const lastDate = LEDGER.filter(r => r.date).map(r => r.date).sort((a,b) => b-a)[0];
-  document.getElementById("last-updated").textContent =
-    lastDate ? lastDate.toISOString().split("T")[0] : "n/a";
-  document.getElementById("trade-count").textContent = `${LEDGER.length} trades`;
-  renderSummary();
-  renderLog();
-  renderDashboard();
-  renderHealth();
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════════════════════════
-const fmtPct = v => v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
-const fmtPctRaw = v => v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
-const fmtUsd = v => v == null || isNaN(v) ? "—" : "$" + Number(v).toLocaleString(undefined, {maximumFractionDigits: 0});
-const fmtNum = (v, d=2) => v == null || isNaN(v) ? "—" : Number(v).toFixed(d);
-const fmtDate = d => d ? d.toISOString().split("T")[0] : "—";
-
-function ymd(d) { return d.toISOString().split("T")[0]; }
-function ym(d)  { return d.toISOString().slice(0,7); }
-
-function classify(value, baseline, tolerance, biggerIsBetter=true) {
-  // Returns 'green', 'yellow', 'red' based on drift vs baseline.
-  if (value == null || isNaN(value) || baseline == null) return "yellow";
-  const diff = biggerIsBetter ? (value - baseline) : (baseline - value);
-  const pct = Math.abs(diff) / Math.abs(baseline);
-  if (diff >= 0) return "green";
-  if (pct <= tolerance) return "yellow";
-  return "red";
-}
-
-function periodFilter(period) {
-  if (period === "all") return _ => true;
-  const now = new Date();
-  let cutoff;
-  if (period === "week")  { cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 7); }
-  if (period === "month") { cutoff = new Date(now); cutoff.setMonth(cutoff.getMonth() - 1); }
-  if (period === "year")  { cutoff = new Date(now); cutoff.setFullYear(cutoff.getFullYear() - 1); }
-  return r => r.date && r.date >= cutoff;
-}
-
-function computeStats(trades) {
-  if (!trades.length) return null;
-  const wins = trades.filter(t => t.is_win);
-  const losses = trades.filter(t => t.is_loss);
-  const sumWin = wins.reduce((s,t) => s + (t.pnl_pct || 0), 0);
-  const sumLoss = losses.reduce((s,t) => s + (t.pnl_pct || 0), 0);
-  const wr = wins.length / trades.length * 100;
-  const pf = sumLoss === 0 ? 99 : sumWin / -sumLoss;
-  const rs = trades.map(t => t.r_multiple).filter(v => v != null && !isNaN(v));
-  const avgR = rs.length ? rs.reduce((s,v) => s+v, 0) / rs.length : null;
-
-  // Equity curve from per-trade pct (compounded as if 1R = 5%, but we just use pnl_pct directly here)
-  let eq = 10000;
-  const curve = [{ date: trades[0].date, equity: eq }];
-  let peak = eq, maxDD = 0;
-  trades.forEach(t => {
-    if (t.pnl_pct == null || isNaN(t.pnl_pct)) return;
-    eq = eq * (1 + t.pnl_pct);
-    curve.push({ date: t.date, equity: eq });
-    if (eq > peak) peak = eq;
-    const dd = (eq / peak - 1) * 100;
-    if (dd < maxDD) maxDD = dd;
-  });
-  const totalPct = (eq / 10000 - 1) * 100;
-  return {
-    n: trades.length, wins: wins.length, losses: losses.length,
-    wr, pf, avgR, totalPct, maxDD, curve, finalEq: eq,
-  };
-}
-
-function backtestOnly() {
-  return LEDGER.filter(r => r.source === "backtest_scheme_i_plus_c3c5");
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// SUMMARY (narrative)
-// ═══════════════════════════════════════════════════════════════════
-let currentPeriod = "week";
-
-function renderSummary() {
-  const filt = periodFilter(currentPeriod);
-  const trades = LEDGER.filter(filt).filter(r => r.pnl_pct != null);
-  const stats = computeStats(trades);
-  const el = document.getElementById("summary-content");
-
-  if (!stats) {
-    const periodWord = { week: "week", month: "month", year: "year", all: "period" }[currentPeriod];
-    el.innerHTML = `<div class="empty">
-      <h3 style="color:var(--text);margin-bottom:8px;">No trades this ${periodWord}.</h3>
-      <p>The strategy is patient — it only fires on high-quality setups. A quiet ${periodWord} is not a problem; it's the system filtering out noise.</p>
-    </div>`;
-    return;
-  }
-
-  const winNarrative = stats.wins > stats.losses ? "more wins than losses" :
-                       stats.wins < stats.losses ? "more losses than wins" :
-                       "an even split between wins and losses";
-  const moneyDir = stats.totalPct > 0 ? "up" : "down";
-  const moneyClass = stats.totalPct > 0 ? "green" : "red";
-
-  // Top winners and losers
-  const sortedByPnl = [...trades].sort((a,b) => (b.pnl_pct||0) - (a.pnl_pct||0));
-  const bestTrade = sortedByPnl[0];
-  const worstTrade = sortedByPnl[sortedByPnl.length - 1];
-
-  const tradeMini = t => {
-    const info = STRAT_INFO[t.strat] || STRAT_INFO[t.setup_type] || { blurb: "—", tf: t.timeframe || "—", side: t.direction };
-    const cls = (t.pnl_pct || 0) >= 0 ? "green" : "red";
-    return `<div class="trade-mini">
-      <div class="date">${fmtDate(t.date)}</div>
-      <div>
-        <div><b>${(t.strat || t.setup_type || "—").replace(/_/g," ")}</b> <span class="dim">· ${info.tf} · ${info.side}</span></div>
-        <div class="reason">${info.blurb}</div>
-      </div>
-      <div class="pnl ${cls}">${fmtPct(t.pnl_pct)}</div>
-    </div>`;
-  };
-
-  const periodLabel = {
-    week: "the past 7 days", month: "the past month", year: "the past year", all: "all time"
-  }[currentPeriod];
-
-  let html = `
-    <div class="grid grid-3" style="margin-bottom:16px;">
-      <div class="card">
-        <div class="card-title">Trades</div>
-        <div class="card-value">${stats.n}</div>
-        <div class="card-sub">${stats.wins} wins · ${stats.losses} losses</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Win rate</div>
-        <div class="card-value">${stats.wr.toFixed(0)}%</div>
-        <div class="card-sub">vs ${BASELINE.wr.toFixed(0)}% long-term average</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Account change</div>
-        <div class="card-value ${moneyClass}">${fmtPctRaw(stats.totalPct)}</div>
-        <div class="card-sub">if you risked 100% per trade · for relative scale only</div>
-      </div>
-    </div>
-
-    <div class="narrative">
-      <h3>What happened ${periodLabel}</h3>
-      <p>The strategy fired <b>${stats.n} trade${stats.n===1?"":"s"}</b> — ${winNarrative}. Account is <span class="${moneyClass}"><b>${moneyDir} ${fmtPctRaw(Math.abs(stats.totalPct))}</b></span> for the period.</p>
-
-      ${bestTrade ? `<h3>Best trade</h3>${tradeMini(bestTrade)}` : ""}
-      ${worstTrade && worstTrade !== bestTrade ? `<h3>Worst trade</h3>${tradeMini(worstTrade)}` : ""}
-
-      <h3>All trades this period</h3>
-      ${trades.slice().reverse().map(tradeMini).join("")}
-
-      <div class="quote">
-        ${stats.n < 3 ?
-          "Few trades is normal for this strategy — it waits for premium setups across multiple timeframes. Patience is part of the edge." :
-          stats.wr >= 50 ?
-            "Win rate is healthy. The system is finding high-conviction setups." :
-            "Win rate is below 50% — that's expected when reward-to-risk is well above 1:1. The math still favors the strategy as long as the wins are larger than the losses (they usually are)."}
-      </div>
-    </div>
-  `;
-  el.innerHTML = html;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// TRADE LOG
-// ═══════════════════════════════════════════════════════════════════
-function renderLog() {
-  // Populate filters once
-  const sources = [...new Set(LEDGER.map(r => r.source).filter(Boolean))].sort();
-  const strats = [...new Set(LEDGER.map(r => r.strat || r.setup_type).filter(Boolean))].sort();
-  const sourceSel = document.getElementById("filter-source");
-  const stratSel = document.getElementById("filter-strat");
-  if (sourceSel.options.length <= 1) {
-    // Friendly labels per source
-    const SOURCE_LABEL = {
-      "backtest_scheme_i_plus_c3c5":    "Canonical backtest (241 trades, full data)",
-      "backtest_tiered_final":          "Older Scheme backtest (no prices)",
-      "backtest_tiered_raw_all_tf":     "Raw exploratory (all 14 strats, no prices)",
-      "live_signal_log":                "Live signal log (Binance)",
-      "live_alpaca_paper":              "Live Alpaca paper",
-      "live_alpaca_real":               "Live Alpaca real",
-      "manual":                         "Manual",
-    };
-    // Canonical first, then the rest
-    const ordered = ["backtest_scheme_i_plus_c3c5", ...sources.filter(s => s !== "backtest_scheme_i_plus_c3c5")];
-    ordered.forEach(s => {
-      if (sources.includes(s)) sourceSel.add(new Option(SOURCE_LABEL[s] || s, s));
-    });
-    strats.forEach(s => stratSel.add(new Option(s.replace(/_/g," "), s)));
-    // Default to canonical so user sees the rich data first
-    if (sources.includes("backtest_scheme_i_plus_c3c5")) {
-      sourceSel.value = "backtest_scheme_i_plus_c3c5";
-    }
-  }
-  drawLogRows();
-}
-
-function drawLogRows() {
-  const fs = document.getElementById("filter-source").value;
-  const fst = document.getElementById("filter-strat").value;
-  const fr = document.getElementById("filter-result").value;
-  const ft = document.getElementById("filter-text").value.toLowerCase();
-
-  let rows = LEDGER.filter(r => {
-    if (fs && r.source !== fs) return false;
-    const strat = r.strat || r.setup_type;
-    if (fst && strat !== fst) return false;
-    if (fr === "win" && !r.is_win) return false;
-    if (fr === "loss" && !r.is_loss) return false;
-    if (ft) {
-      const blob = (r.strat||"") + " " + (r.setup_type||"") + " " + (r.exit_reason||"") + " " + (r.notes||"");
-      if (!blob.toLowerCase().includes(ft)) return false;
-    }
-    return true;
-  });
-
-  rows.sort((a,b) => {
-    const va = a[logSort.col], vb = b[logSort.col];
-    if (va == null && vb == null) return 0;
-    if (va == null) return 1;
-    if (vb == null) return -1;
-    if (va < vb) return logSort.dir === "asc" ? -1 : 1;
-    if (va > vb) return logSort.dir === "asc" ? 1 : -1;
-    return 0;
-  });
-
-  // Update header arrows
-  document.querySelectorAll("#log-table th").forEach(th => {
-    th.classList.remove("sorted-asc", "sorted-desc");
-    if (th.dataset.sort === logSort.col) {
-      th.classList.add(logSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
-    }
-  });
-
-  const tbody = document.querySelector("#log-table tbody");
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:30px;">No trades match.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = rows.slice(0, 500).map(r => {
-    const strat = r.strat || r.setup_type || "—";
-    const info = STRAT_INFO[strat] || { blurb: "—" };
-    const dirCls = r.direction === "long" ? "green" : "red";
-    const pnlCls = (r.pnl_pct || 0) > 0 ? "green" : (r.pnl_pct || 0) < 0 ? "red" : "dim";
-    const outcomePill =
-      r.exit_reason === "tp_hit"   ? `<span class="pill green">Take profit</span>` :
-      r.exit_reason === "sl_hit"   ? `<span class="pill red">Stop loss</span>` :
-      r.exit_reason === "time_exit"? `<span class="pill yellow">Time exit</span>` :
-      r.exit_reason ? `<span class="pill blue">${r.exit_reason}</span>` : "—";
-    return `<tr>
-      <td>${fmtDate(r.date)}</td>
-      <td><b>${strat.replace(/_/g," ")}</b></td>
-      <td class="${dirCls}">${(r.direction||"").toUpperCase()}</td>
-      <td>${r.entry_price ? fmtUsd(r.entry_price) : "—"}</td>
-      <td>${r.exit_price ? fmtUsd(r.exit_price) : "—"}</td>
-      <td class="${pnlCls}">${r.r_multiple != null ? fmtNum(r.r_multiple,2)+"R" : "—"}</td>
-      <td class="${pnlCls}">${fmtPct(r.pnl_pct)}</td>
-      <td>${outcomePill}</td>
-      <td class="reason-cell">${info.blurb}</td>
-    </tr>`;
-  }).join("");
-  if (rows.length > 500) {
-    tbody.innerHTML += `<tr><td colspan="9" style="text-align:center;color:var(--text-mute);padding:12px;">Showing 500 of ${rows.length}. Use filters to narrow.</td></tr>`;
-  }
-}
-
-document.querySelectorAll("#log-table th[data-sort]").forEach(th => {
-  th.addEventListener("click", () => {
-    const col = th.dataset.sort;
-    if (logSort.col === col) logSort.dir = logSort.dir === "asc" ? "desc" : "asc";
-    else { logSort.col = col; logSort.dir = "desc"; }
-    drawLogRows();
-  });
-});
-["filter-source","filter-strat","filter-result","filter-text"].forEach(id => {
-  document.getElementById(id).addEventListener("input", drawLogRows);
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════════════════
-function renderDashboard() {
-  const trades = backtestOnly().length ? backtestOnly() : LEDGER.filter(r => r.pnl_pct != null);
-  const stats = computeStats(trades);
-  if (!stats) return;
-
-  document.getElementById("dash-total").textContent = fmtPctRaw(stats.totalPct);
-  document.getElementById("dash-total").className = "card-value " + (stats.totalPct >= 0 ? "green" : "red");
-  document.getElementById("dash-total-sub").textContent = `${fmtUsd(10000)} → ${fmtUsd(stats.finalEq)}`;
-  document.getElementById("dash-wr").textContent = stats.wr.toFixed(1) + "%";
-  document.getElementById("dash-wr-sub").textContent = `${stats.wins}W / ${stats.losses}L`;
-  document.getElementById("dash-pf").textContent = fmtNum(stats.pf, 2);
-  document.getElementById("dash-rr").textContent = stats.avgR != null ? fmtNum(stats.avgR, 2) + "R" : "—";
-  document.getElementById("dash-dd").textContent = fmtPctRaw(stats.maxDD);
-  document.getElementById("dash-dd").className = "card-value red";
-  document.getElementById("dash-n").textContent = stats.n;
-  document.getElementById("dash-n-sub").textContent = `${(stats.n / Math.max(1, (new Date() - trades[0].date) / (365.25*86400000))).toFixed(0)} per year`;
-
-  drawEquity(stats.curve);
-  drawDrawdown(stats.curve);
-  drawStratBars(trades);
-  drawMonthly(trades);
-}
-
-function destroyChart(key) {
-  if (charts[key]) { charts[key].destroy(); charts[key] = null; }
-}
-
-function drawEquity(curve) {
-  destroyChart("equity");
-  const ctx = document.getElementById("chart-equity").getContext("2d");
-  charts.equity = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: curve.map(p => p.date),
-      datasets: [{
-        data: curve.map(p => p.equity),
-        borderColor: "#22c55e", backgroundColor: "rgba(34,197,94,0.08)",
-        fill: true, tension: 0.1, borderWidth: 2, pointRadius: 0,
-      }],
-    },
-    options: chartOpts({ y: { ticks: { callback: v => "$" + (v/1000).toFixed(0) + "k" } } }),
-  });
-}
-
-function drawDrawdown(curve) {
-  destroyChart("dd");
-  let peak = 0;
-  const dd = curve.map(p => {
-    peak = Math.max(peak, p.equity);
-    return { date: p.date, dd: (p.equity / peak - 1) * 100 };
-  });
-  const ctx = document.getElementById("chart-dd").getContext("2d");
-  charts.dd = new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: dd.map(p => p.date),
-      datasets: [{
-        data: dd.map(p => p.dd),
-        borderColor: "#ef4444", backgroundColor: "rgba(239,68,68,0.15)",
-        fill: true, tension: 0, borderWidth: 1.5, pointRadius: 0,
-      }],
-    },
-    options: chartOpts({ y: { ticks: { callback: v => v.toFixed(0) + "%" }, max: 0 } }),
-  });
-}
-
-function drawStratBars(trades) {
-  destroyChart("strat");
-  const byStrat = {};
-  trades.forEach(t => {
-    const s = t.strat || t.setup_type;
-    if (!s) return;
-    if (!byStrat[s]) byStrat[s] = { w: 0, l: 0 };
-    if (t.is_win) byStrat[s].w++;
-    if (t.is_loss) byStrat[s].l++;
-  });
-  const labels = Object.keys(byStrat);
-  const ctx = document.getElementById("chart-strat").getContext("2d");
-  charts.strat = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: labels.map(s => s.replace(/_/g," ")),
-      datasets: [
-        { label: "Wins",   data: labels.map(s => byStrat[s].w),  backgroundColor: "#22c55e" },
-        { label: "Losses", data: labels.map(s => byStrat[s].l),  backgroundColor: "#ef4444" },
-      ],
-    },
-    options: chartOpts({ x: { stacked: true, ticks: { autoSkip: false, font: { size: 9 } } }, y: { stacked: true } }, true),
-  });
-}
-
-function drawMonthly(trades) {
-  destroyChart("monthly");
-  const byMonth = {};
-  trades.forEach(t => {
-    if (!t.date || t.pnl_pct == null) return;
-    const key = ym(t.date);
-    if (!byMonth[key]) byMonth[key] = 0;
-    byMonth[key] += t.pnl_pct * 100;
-  });
-  const labels = Object.keys(byMonth).sort();
-  const data = labels.map(k => byMonth[k]);
-  const ctx = document.getElementById("chart-monthly").getContext("2d");
-  charts.monthly = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: data.map(v => v >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"),
-      }],
-    },
-    options: chartOpts({ y: { ticks: { callback: v => v.toFixed(0) + "%" } } }),
-  });
-}
-
-function chartOpts(scaleOverrides = {}, showLegend = false) {
-  return {
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: showLegend, labels: { color: "#9ca3af" } } },
-    scales: {
-      x: Object.assign({
-        type: charts._cat ? undefined : (scaleOverrides.x?.stacked ? "category" : "time"),
-        time: { unit: "year" },
-        grid: { color: "rgba(255,255,255,0.04)" },
-        ticks: { color: "#6b7280", font: { size: 10 } },
-      }, scaleOverrides.x || {}),
-      y: Object.assign({
-        grid: { color: "rgba(255,255,255,0.04)" },
-        ticks: { color: "#6b7280", font: { size: 10 } },
-      }, scaleOverrides.y || {}),
-    },
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// HEALTH CHECK
-// ═══════════════════════════════════════════════════════════════════
-function renderHealth() {
-  const trades = backtestOnly().length ? backtestOnly() : LEDGER.filter(r => r.pnl_pct != null);
-  const stats = computeStats(trades);
-  if (!stats) return;
-
-  // Each metric: name, current, baseline, color, plain-English explanation
-  const checks = [
-    {
-      name: "Win rate",
-      value: stats.wr,
-      baseline: BASELINE.wr,
-      unit: "%",
-      color: classify(stats.wr, BASELINE.wr, 0.10, true),
-      explain: `Out of every 100 trades, this strategy wins about <b>${stats.wr.toFixed(0)}</b>. Long-term average is ${BASELINE.wr.toFixed(0)}%. A win rate below 50% is fine when the wins are bigger than the losses — see Profit Factor below.`,
-    },
-    {
-      name: "Profit factor",
-      value: stats.pf,
-      baseline: BASELINE.pf,
-      unit: "",
-      color: classify(stats.pf, BASELINE.pf, 0.15, true),
-      explain: `For every $1 lost, the strategy makes <b>$${stats.pf.toFixed(2)}</b>. Above 1.5 is healthy. Long-term average is ${BASELINE.pf}.`,
-    },
-    {
-      name: "Total return",
-      value: stats.totalPct,
-      baseline: BASELINE.total_pct,
-      unit: "%",
-      color: classify(stats.totalPct, BASELINE.total_pct, 0.20, true),
-      explain: `If you started with $10,000 and risked your full account every trade, you'd be at <b>${fmtUsd(stats.finalEq)}</b>. This is a relative scale; real-world position sizing uses 5% per trade.`,
-    },
-    {
-      name: "Max drawdown",
-      value: stats.maxDD,
-      baseline: BASELINE.dd,
-      unit: "%",
-      color: stats.maxDD <= BASELINE.dd * 1.15 ? "green" : stats.maxDD <= BASELINE.dd * 1.30 ? "yellow" : "red",
-      explain: `Worst dip from a new high was <b>${stats.maxDD.toFixed(1)}%</b>. Baseline allows up to ${BASELINE.dd}%. If the current number gets worse than that, the strategy may be drifting.`,
-    },
-    {
-      name: "Trade frequency",
-      value: stats.n,
-      baseline: BASELINE.trades,
-      unit: " trades",
-      color: stats.n >= BASELINE.trades * 0.95 ? "green" : "yellow",
-      explain: `<b>${stats.n}</b> trades have been recorded vs ${BASELINE.trades} expected. The strategy is selective — fewer trades is normal during quiet markets.`,
-    },
-    {
-      name: "Recent activity",
-      value: lastTradeDays(),
-      baseline: 14,
-      unit: " days ago",
-      color: lastTradeDays() <= 30 ? "green" : lastTradeDays() <= 60 ? "yellow" : "red",
-      explain: `Last triggered trade was <b>${lastTradeDays()} days ago</b>. The strategy averages a trade every ~13 days. A long quiet stretch is OK, but >60 days warrants checking the data feed.`,
-    },
-  ];
-
-  const colorScore = { green: 2, yellow: 1, red: 0 };
-  const total = checks.reduce((s,c) => s + colorScore[c.color], 0);
-  const max = checks.length * 2;
-  const pct = total / max;
-  const overallColor = pct >= 0.85 ? "green" : pct >= 0.6 ? "yellow" : "red";
-  const overallText = {
-    green: "Strategy is on track. All key metrics are within healthy bands. Keep running.",
-    yellow: "Some metrics are drifting from the baseline. Not a panic — review which checks are yellow and watch the trend over the next few weeks.",
-    red: "One or more metrics are well outside expected ranges. Investigate before relying on the strategy. Don't size up.",
-  }[overallColor];
-  document.getElementById("health-overall").innerHTML = `<span class="pill ${overallColor}">${overallColor.toUpperCase()}</span>`;
-  document.getElementById("health-overall-text").innerHTML = overallText;
-
-  document.getElementById("scorecard").innerHTML = checks.map(c => {
-    const valStr = typeof c.value === "number" ? c.value.toFixed(c.unit === "%" ? 1 : c.unit === "" ? 2 : 0) : c.value;
-    return `<div class="health-card">
-      <div class="health-header">
-        <div class="health-name">${c.name}</div>
-        <span class="pill ${c.color}">${c.color}</span>
-      </div>
-      <div class="health-value ${c.color}">${valStr}${c.unit}</div>
-      <div class="health-target">target: ${c.baseline}${c.unit}</div>
-      <div class="health-explain">${c.explain}</div>
-    </div>`;
-  }).join("");
-}
-
-function lastTradeDays() {
-  const dates = LEDGER.filter(r => r.date && r.pnl_pct != null).map(r => r.date);
-  if (!dates.length) return 999;
-  const last = dates.sort((a,b) => b-a)[0];
-  return Math.floor((new Date() - last) / 86400000);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// CHART (TradingView Lightweight Charts) — multi-TF, click-to-inspect
-// ═══════════════════════════════════════════════════════════════════
-let tvChart = null, tvCandles = null;
-let currentTF = "1d";
-let candleCache = {};            // tf -> array of bars
-let priceLines = [];             // entry/sl/tp lines drawn for the inspected trade
-let overlaySeries = [];          // line series for the trade-box overlay
-let markersByTime = {};          // time -> array of trades (for click lookup)
-let baseMarkers = [];            // markers from redrawMarkers (so we can re-apply with overlays)
-let pinned = false;              // when true, hover doesn't clear the inspected trade
-let lastHoverKey = null;         // key of marker currently shown via hover (prevents thrash)
-
-async function loadCandles(tf) {
-  if (candleCache[tf]) return candleCache[tf];
-  try {
-    const res = await fetch(`chart_data_${tf}.json?t=${Date.now()}`);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    candleCache[tf] = data;
-    return data;
-  } catch (e) {
-    // Fallback to legacy single-file daily data
-    if (tf === "1d") {
+  // Hydrate from live API if available — NEVER overwrite placeholders with null
+  // (components access fields like .sl_price.toLocaleString() that crash on undefined).
+  React.useEffect(() => {
+    let stop = false;
+    const refresh = async () => {
       try {
-        const res = await fetch(`chart_data.json?t=${Date.now()}`);
-        if (res.ok) { candleCache[tf] = await res.json(); return candleCache[tf]; }
-      } catch {}
-    }
-    document.getElementById("tv-chart").innerHTML =
-      `<div class="empty" style="margin:20px;">Could not load <code>chart_data_${tf}.json</code>. Run <code>python weekly_health_check.py</code> once to (re)generate. <span class="dim">(${e.message})</span></div>`;
-    return null;
-  }
-}
-
-async function renderChart() {
-  const candles = await loadCandles(currentTF);
-  if (!candles) return;
-
-  if (!tvChart) {
-    const container = document.getElementById("tv-chart");
-    container.innerHTML = "";
-    tvChart = LightweightCharts.createChart(container, {
-      layout: { background: { color: "#0b0f17" }, textColor: "#9ca3af", fontSize: 11 },
-      grid:   { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
-      rightPriceScale: { borderColor: "#1f2937" },
-      timeScale: { borderColor: "#1f2937", timeVisible: currentTF !== "1w" && currentTF !== "1d", secondsVisible: false },
-      crosshair: { mode: 1 },
-      autoSize: true,
-    });
-    tvCandles = tvChart.addCandlestickSeries({
-      upColor: "#22c55e", downColor: "#ef4444",
-      borderUpColor: "#22c55e", borderDownColor: "#ef4444",
-      wickUpColor: "#22c55e", wickDownColor: "#ef4444",
-    });
-    // Click handler — pin the trade box and details
-    tvChart.subscribeClick(param => {
-      if (!param.time) return;
-      const trades = markersByTime[String(param.time)] || markersByTime[param.time];
-      if (trades && trades.length) { pinned = true; showTradeDetail(trades); }
-      else { pinned = false; clearOverlay(); }
-    });
-    // Hover preview — only redraw when the nearest marker CHANGES (else thrashes badly)
-    tvChart.subscribeCrosshairMove(param => {
-      if (pinned) return;
-      if (!param.time) {
-        if (lastHoverKey !== null) { lastHoverKey = null; clearOverlay(); }
-        return;
-      }
-      const tNum = Number(param.time);
-      const stepSec = currentTF === "1w" ? 7*86400 : currentTF === "1d" ? 86400 : currentTF === "4h" ? 4*3600 : 3600;
-      let best = null, bestDelta = Infinity;
-      for (const k of Object.keys(markersByTime)) {
-        const d = Math.abs(Number(k) - tNum);
-        if (d < bestDelta) { bestDelta = d; best = k; }
-      }
-      const newKey = (best && bestDelta <= stepSec * 0.6) ? best : null;
-      if (newKey === lastHoverKey) return;  // no change → skip redraw
-      lastHoverKey = newKey;
-      if (newKey) showTradeDetail(markersByTime[newKey], /*hover*/true);
-      else clearOverlay();
-    });
-    new ResizeObserver(() => tvChart && tvChart.timeScale().fitContent()).observe(document.getElementById("tv-chart"));
-  } else {
-    tvChart.applyOptions({
-      timeScale: { timeVisible: currentTF !== "1w" && currentTF !== "1d", secondsVisible: false }
-    });
-  }
-
-  tvCandles.setData(candles);
-  redrawMarkers();
-  applyRangePreset(document.querySelector("#range-toggle button.active")?.dataset.range || "all");
-}
-
-function trimToBucket(date) {
-  // Returns the unix-second time key matching the candle bucket for currentTF.
-  const ts = Math.floor(date.getTime() / 1000);
-  const candles = candleCache[currentTF] || [];
-  if (!candles.length) return ts;
-  // Binary search for the latest candle with time <= ts
-  let lo = 0, hi = candles.length - 1, ans = candles[0].time;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (candles[mid].time <= ts) { ans = candles[mid].time; lo = mid + 1; }
-    else hi = mid - 1;
-  }
-  return ans;
-}
-
-function redrawMarkers() {
-  if (!tvCandles) return;
-  clearOverlay();
-  const src = document.getElementById("chart-source").value;
-  const showWins = document.getElementById("show-wins").checked;
-  const showLosses = document.getElementById("show-losses").checked;
-
-  const tradeTfFilter = document.getElementById("filter-trade-tf").value;
-  let trades = LEDGER.filter(r => r.date && r.pnl_pct != null);
-  if (src) trades = trades.filter(r => r.source === src);
-  trades = trades.filter(t => (t.is_win && showWins) || (t.is_loss && showLosses));
-  if (tradeTfFilter === "match") {
-    trades = trades.filter(t => (t.timeframe || "").toLowerCase() === currentTF);
-  } else if (tradeTfFilter !== "all") {
-    trades = trades.filter(t => (t.timeframe || "").toLowerCase() === tradeTfFilter);
-  }
-
-  markersByTime = {};
-  trades.forEach(t => {
-    const key = trimToBucket(t.date);
-    if (!key) return;
-    if (!markersByTime[key]) markersByTime[key] = [];
-    markersByTime[key].push(t);
-  });
-
-  const markers = Object.entries(markersByTime).map(([timeStr, ts]) => {
-    const isLong = ts.some(t => t.direction === "long");
-    const won = ts.every(t => t.is_win);
-    const lost = ts.every(t => t.is_loss);
-    const color = won ? "#22c55e" : lost ? "#ef4444" : "#eab308";
-    const totalPnl = ts.reduce((s,t) => s + (t.pnl_pct||0), 0);
-    return {
-      time: Number(timeStr),  // CRITICAL: object keys are strings; Lightweight Charts requires numeric unix seconds
-      position: isLong ? "belowBar" : "aboveBar",
-      color,
-      shape: isLong ? "arrowUp" : "arrowDown",
-      text: `${ts.length>1 ? ts.length+"× " : ""}${(totalPnl*100).toFixed(1)}%`,
+        const [stRes, trRes] = await Promise.all([
+          fetch('/api/state').then(r => r.ok ? r.json() : null),
+          fetch('/api/trades').then(r => r.ok ? r.json() : null),
+        ]);
+        if (stop) return;
+        if (!stRes && !trRes) return;
+        const merged = { ...MOCK };
+        if (stRes && !stRes.err) {
+          // Merge but keep MOCK's placeholders for active_trade if live is null
+          merged.bot_state = {
+            ...MOCK.bot_state,
+            ...stRes,
+            active_trade: stRes.active_trade || MOCK.bot_state.active_trade,
+          };
+          if (stRes.active_trade) {
+            const at = stRes.active_trade;
+            merged.position = {
+              symbol: 'BTC/USD', qty: at.qty_btc || 0,
+              avg_entry_price: at.entry || 0,
+              current_price: at.current_price || at.entry || 0,
+              unrealized_pl: at.unrealized_pl || 0, unrealized_plpc: 0,
+              side: at.side || 'long',
+            };
+          }
+          // else: keep MOCK.position (already a safe placeholder with zeros)
+        }
+        if (trRes?.trades?.length) merged.trades = trRes.trades;
+        setData(merged);
+      } catch (e) { /* live mode unavailable, stay on MOCK */ }
     };
-  }).sort((a,b) => a.time - b.time);
+    refresh();
+    const id = setInterval(refresh, 15000);
+    return () => { stop = true; clearInterval(id); };
+  }, []);
 
-  baseMarkers = markers;
-  tvCandles.setMarkers(markers);
+  // Apply accent color CSS variable
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--accent', tweaks.accentColor);
+  }, [tweaks.accentColor]);
 
-  // Visual feedback — counter + empty-state banner
-  const counterEl = document.getElementById("chart-trade-count");
-  if (counterEl) counterEl.textContent = `${markers.length} trade${markers.length===1?"":"s"} shown`;
-  const banner = document.getElementById("chart-empty");
-  if (banner) {
-    if (markers.length === 0) {
-      banner.style.display = "block";
-      banner.innerHTML = `No trades match the current filters.<br>
-        <span style="color:var(--text-mute);font-size:12px;">
-        The strategy is selective — it only fires on premium setups across multiple timeframes.
-        Try clicking <b style="color:var(--accent);">All</b> in the range bar, or change the timeframe / filter dropdowns.</span>`;
-    } else {
-      banner.style.display = "none";
-    }
-  }
-}
-
-function clearOverlay() {
-  if (priceLines.length) priceLines.forEach(l => tvCandles.removePriceLine(l));
-  priceLines = [];
-  if (overlaySeries.length) overlaySeries.forEach(s => tvChart.removeSeries(s));
-  overlaySeries = [];
-  if (tvCandles) tvCandles.setMarkers(baseMarkers);
-  lastHoverKey = null;
-  document.getElementById("trade-detail").style.display = "none";
-  document.getElementById("chart-grid").classList.remove("with-detail");
-}
-
-function showTradeDetail(trades, hover=false) {
-  // Use the first trade with full price data
-  const t = trades.find(x => x.entry_price && x.sl_price && x.tp_price) || trades[0];
-  // Don't fully clear if just hovering — but remove old overlay series/lines
-  priceLines.forEach(l => tvCandles.removePriceLine(l));
-  priceLines = [];
-  overlaySeries.forEach(s => tvChart.removeSeries(s));
-  overlaySeries = [];
-
-  const entryTime = trimToBucket(t.date);
-  const candles = candleCache[currentTF] || [];
-  const entryIdx = candles.findIndex(c => c.time === entryTime);
-
-  // Compute exit time from entry + bars_held; fall back to entry+1 bar if missing
-  let exitIdx = entryIdx >= 0 && t.bars_held != null
-    ? Math.min(entryIdx + Number(t.bars_held), candles.length - 1)
-    : (entryIdx >= 0 ? Math.min(entryIdx + 1, candles.length - 1) : -1);
-  const exitTime = exitIdx >= 0 ? candles[exitIdx].time : entryTime;
-
-  // Draw shaded rectangles bounded to the trade duration:
-  //   green zone from entry → TP   (above entry, profit area)
-  //   red zone   from entry → SL   (below entry, risk area)
-  if (entryIdx >= 0 && exitIdx > entryIdx && t.entry_price && t.tp_price && t.sl_price) {
-    const tpData = [], slData = [];
-    for (let i = entryIdx; i <= exitIdx; i++) {
-      tpData.push({ time: candles[i].time, value: t.tp_price });
-      slData.push({ time: candles[i].time, value: t.sl_price });
-    }
-    const tpZone = tvChart.addBaselineSeries({
-      baseValue: { type: "price", price: t.entry_price },
-      topFillColor1: "rgba(34,197,94,0.30)", topFillColor2: "rgba(34,197,94,0.05)",
-      bottomFillColor1: "rgba(34,197,94,0)", bottomFillColor2: "rgba(34,197,94,0)",
-      topLineColor: "rgba(34,197,94,0.7)", bottomLineColor: "rgba(34,197,94,0)",
-      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-    });
-    tpZone.setData(tpData); overlaySeries.push(tpZone);
-
-    const slZone = tvChart.addBaselineSeries({
-      baseValue: { type: "price", price: t.entry_price },
-      topFillColor1: "rgba(239,68,68,0)", topFillColor2: "rgba(239,68,68,0)",
-      bottomFillColor1: "rgba(239,68,68,0.05)", bottomFillColor2: "rgba(239,68,68,0.30)",
-      topLineColor: "rgba(239,68,68,0)", bottomLineColor: "rgba(239,68,68,0.7)",
-      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-    });
-    slZone.setData(slData); overlaySeries.push(slZone);
-
-    // Dashed entry line spanning the trade
-    const entryLine = tvChart.addLineSeries({
-      color: "rgba(59,130,246,0.55)", lineWidth: 1, lineStyle: 2,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
-    });
-    entryLine.setData(tpData.map(d => ({ time: d.time, value: t.entry_price })));
-    overlaySeries.push(entryLine);
-
-    // Dim every OTHER marker so the inspected trade stands out
-    const dim = hex => {
-      const m = hex.match(/^#?([0-9a-f]{6})$/i);
-      if (!m) return hex;
-      const r = parseInt(m[1].slice(0,2),16), g = parseInt(m[1].slice(2,4),16), b = parseInt(m[1].slice(4,6),16);
-      return `rgba(${r},${g},${b},0.15)`;
+  // Tweaks protocol
+  React.useEffect(() => {
+    const handler = e => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
     };
-    const dimmed = baseMarkers.map(m => m.time === entryTime ? m : { ...m, color: dim(m.color) });
-    tvCandles.setMarkers(dimmed);
-  }
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
-  // Auto-zoom only on pinned (click), not on hover — avoids violent panning while moving cursor
-  if (!hover && entryIdx >= 0) {
-    const fromIdx = Math.max(0, entryIdx - 10);
-    const toIdx = Math.min(candles.length - 1, Math.max(exitIdx, entryIdx) + 10);
-    tvChart.timeScale().setVisibleRange({
-      from: candles[fromIdx].time,
-      to: candles[toIdx].time,
-    });
-  }
-  // Side panel only on pinned (click)
-  if (hover) return;
+  const setTweak = (k, v) => {
+    const next = { ...tweaks, [k]: v };
+    setTweaks(next);
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: next }, '*');
+  };
 
-  // Side panel
-  const detail = document.getElementById("trade-detail-body");
-  const info = STRAT_INFO[t.strat || t.setup_type] || { blurb: "—" };
-  const pnlCls = (t.pnl_pct||0) > 0 ? "green" : "red";
-  const outcomePill =
-    t.exit_reason === "tp_hit"   ? `<span class="pill green">Take profit</span>` :
-    t.exit_reason === "sl_hit"   ? `<span class="pill red">Stop loss</span>` :
-    t.exit_reason === "time_exit"? `<span class="pill yellow">Time exit</span>` :
-    `<span class="pill blue">${t.exit_reason||"—"}</span>`;
-  detail.innerHTML = `
-    <div style="font-size:13px;font-weight:600;margin-bottom:4px;">${(t.strat||t.setup_type||"—").replace(/_/g," ")}</div>
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">${info.blurb}</div>
-    <div class="row"><span class="k">Date</span><span class="v">${fmtDate(t.date)}</span></div>
-    <div class="row"><span class="k">Side</span><span class="v ${t.direction==="long"?"green":"red"}">${(t.direction||"").toUpperCase()}</span></div>
-    <div class="row"><span class="k">Tier</span><span class="v">${t.tier || "—"}</span></div>
-    <div class="row"><span class="k">Entry</span><span class="v">${t.entry_price ? fmtUsd(t.entry_price) : "—"}</span></div>
-    <div class="row"><span class="k">Stop loss</span><span class="v red">${t.sl_price ? fmtUsd(t.sl_price) : "—"}</span></div>
-    <div class="row"><span class="k">Take profit</span><span class="v green">${t.tp_price ? fmtUsd(t.tp_price) : "—"}</span></div>
-    <div class="row"><span class="k">Exit</span><span class="v">${t.exit_price ? fmtUsd(t.exit_price) : "—"}</span></div>
-    <div class="row"><span class="k">Bars held</span><span class="v">${t.bars_held ?? "—"}</span></div>
-    <div class="row"><span class="k">R multiple</span><span class="v ${pnlCls}">${t.r_multiple != null ? fmtNum(t.r_multiple,2)+"R" : "—"}</span></div>
-    <div class="row"><span class="k">P&amp;L</span><span class="v ${pnlCls}">${fmtPct(t.pnl_pct)}</span></div>
-    <div class="row"><span class="k">Outcome</span><span class="v">${outcomePill}</span></div>
-    ${trades.length > 1 ? `<div style="margin-top:10px;font-size:11px;color:var(--text-mute);">+ ${trades.length - 1} more trade${trades.length>2?"s":""} on this bar</div>` : ""}
-  `;
-  document.getElementById("trade-detail").style.display = "block";
-  document.getElementById("chart-grid").classList.add("with-detail");
+  const pages = {
+    overview: <Overview data={data} />,
+    chart:    <ChartPage data={data} />,
+    bot:      <BotControl data={data} botStatus={botStatus} setBotStatus={setBotStatus} />,
+    journal:  <Journal data={data} />,
+    ledger:   <Ledger data={data} />,
+    analytics:<Analytics data={data} />,
+    risk:     <RiskMonitor data={data} />,
+    signal:   <SignalCheck data={data} />,
+    strategy: <Strategy data={data} />,
+    telegram: <TelegramPage data={data} />,
+  };
+
+  return (
+    <div style={{ display:'flex', height:'100vh', width:'100%', background: tweaks.bgColor }}>
+      <Sidebar active={page} setActive={setPage} botStatus={botStatus} />
+
+      {/* Main content */}
+      <div style={{ flex:1, overflowY:'auto', position:'relative' }}>
+        {pages[page]}
+      </div>
+
+      {/* Tweaks panel */}
+      {tweaksOpen && (
+        <div style={tweaksPanelStyle}>
+          <div style={tpStyles.header}>
+            <span style={tpStyles.title}>Tweaks</span>
+            <button onClick={() => { setTweaksOpen(false); window.parent.postMessage({type:'__edit_mode_dismissed'},'*'); }} style={tpStyles.close}>✕</button>
+          </div>
+          <div style={tpStyles.section}>
+            <div style={tpStyles.label}>Accent Color</div>
+            <div style={tpStyles.colorRow}>
+              {['#F7931A','#00d084','#a78bfa','#38bdf8','#fb7185'].map(c => (
+                <div key={c} onClick={() => setTweak('accentColor', c)}
+                  style={{...tpStyles.swatch, background:c, outline: tweaks.accentColor===c ? `2px solid ${c}` : '2px solid transparent', outlineOffset:2}} />
+              ))}
+            </div>
+          </div>
+          <div style={tpStyles.section}>
+            <div style={tpStyles.label}>Background</div>
+            <div style={tpStyles.colorRow}>
+              {['#0a0a0c','#090910','#0c0a0a','#08080e'].map(c => (
+                <div key={c} onClick={() => setTweak('bgColor', c)}
+                  style={{...tpStyles.swatch, background:c, border:'1px solid #2a2a38', outline: tweaks.bgColor===c ? '2px solid #F7931A' : '2px solid transparent', outlineOffset:2}} />
+              ))}
+            </div>
+          </div>
+          <div style={tpStyles.section}>
+            <div style={tpStyles.label}>Surface</div>
+            <div style={tpStyles.colorRow}>
+              {['#111116','#13131a','#0f0f14','#141420'].map(c => (
+                <div key={c} onClick={() => setTweak('surfaceColor', c)}
+                  style={{...tpStyles.swatch, background:c, border:'1px solid #2a2a38', outline: tweaks.surfaceColor===c ? '2px solid #F7931A' : '2px solid transparent', outlineOffset:2}} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function applyRangePreset(range) {
-  if (!tvChart || !candleCache[currentTF]) return;
-  if (range === "all") { tvChart.timeScale().fitContent(); return; }
-  const candles = candleCache[currentTF];
-  const last = candles[candles.length - 1].time;
-  const lastDate = typeof last === "string" ? new Date(last) : new Date(last * 1000);
-  const map = { "1M": 30, "3M": 90, "1Y": 365, "3Y": 365*3 };
-  const back = new Date(lastDate); back.setDate(back.getDate() - map[range]);
-  // Find first candle >= back
-  const fromCandle = candles.find(c => {
-    const ct = typeof c.time === "string" ? new Date(c.time) : new Date(c.time * 1000);
-    return ct >= back;
-  });
-  if (fromCandle) tvChart.timeScale().setVisibleRange({ from: fromCandle.time, to: last });
-}
+const tweaksPanelStyle = {
+  position:'fixed', bottom:24, right:24, width:240, background:'#17171e', border:'1px solid #2a2a38',
+  borderRadius:12, padding:'16px', zIndex:1000, boxShadow:'0 8px 32px rgba(0,0,0,0.6)',
+  fontFamily:"'Space Grotesk',sans-serif",
+};
+const tpStyles = {
+  header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 },
+  title: { fontSize:13, fontWeight:700, color:'#ece9e2' },
+  close: { background:'transparent', border:'none', color:'#5a5a6e', cursor:'pointer', fontSize:14, padding:4 },
+  section: { marginBottom:14 },
+  label: { fontSize:11, color:'#3e3e52', letterSpacing:'0.5px', marginBottom:8, textTransform:'uppercase' },
+  colorRow: { display:'flex', gap:8 },
+  swatch: { width:28, height:28, borderRadius:6, cursor:'pointer', transition:'transform 0.1s' },
+};
 
-// Wire controls
-document.getElementById("chart-source").addEventListener("change", redrawMarkers);
-document.getElementById("show-wins").addEventListener("change", redrawMarkers);
-document.getElementById("show-losses").addEventListener("change", redrawMarkers);
-document.getElementById("filter-trade-tf").addEventListener("change", redrawMarkers);
-document.getElementById("chart-clear").addEventListener("click", clearOverlay);
-document.getElementById("trade-detail-close").addEventListener("click", clearOverlay);
-
-document.querySelectorAll("#tf-toggle button").forEach(b => {
-  b.addEventListener("click", async () => {
-    document.querySelectorAll("#tf-toggle button").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    currentTF = b.dataset.tf;
-    await renderChart();
-  });
-});
-document.querySelectorAll("#range-toggle button").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll("#range-toggle button").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    applyRangePreset(b.dataset.range);
-  });
-});
-
-// ═══════════════════════════════════════════════════════════════════
-// TAB / EVENT WIRING
-// ═══════════════════════════════════════════════════════════════════
-document.querySelectorAll("nav.tabs button").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll("nav.tabs button").forEach(x => x.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    document.getElementById("panel-" + b.dataset.tab).classList.add("active");
-    if (b.dataset.tab === "chart") renderChart();
-  });
-});
-
-document.querySelectorAll("#period-toggle button").forEach(b => {
-  b.addEventListener("click", () => {
-    document.querySelectorAll("#period-toggle button").forEach(x => x.classList.remove("active"));
-    b.classList.add("active");
-    currentPeriod = b.dataset.period;
-    renderSummary();
-  });
-});
-
-document.getElementById("refresh").addEventListener("click", e => {
-  e.preventDefault();
-  loadLedger();
-});
-
-// Auto-refresh every 5 min, plus on tab focus
-setInterval(loadLedger, 5 * 60 * 1000);
-window.addEventListener("focus", loadLedger);
-
-// Live BTC price (CoinGecko — free, no key, works in OH)
-async function loadLivePrice() {
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true");
-    const j = await res.json();
-    const px = j.bitcoin?.usd;
-    const chg = j.bitcoin?.usd_24h_change;
-    if (px) {
-      const cls = chg >= 0 ? "green" : "red";
-      const arrow = chg >= 0 ? "▲" : "▼";
-      document.getElementById("live-price").innerHTML =
-        `BTC <b style="color:var(--text);">$${Math.round(px).toLocaleString()}</b> <span class="${cls}" style="font-size:11px;">${arrow} ${Math.abs(chg).toFixed(2)}%</span>`;
-    }
-  } catch (e) {}
-}
-loadLivePrice();
-setInterval(loadLivePrice, 60_000);
-
-// Boot
-loadLedger();
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
 </script>
 </body>
 </html>
